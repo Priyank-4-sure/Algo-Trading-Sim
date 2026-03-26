@@ -1,13 +1,14 @@
-import { LineChart, BarChart2, PieChart, History, Settings, Activity, ChevronRight } from 'lucide-react';
+import { LineChart, BarChart2, PieChart, History, Settings, Activity, ChevronRight, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import type { PageId } from '../../App';
 
 interface SideNavProps {
   activePage: PageId;
   setActivePage: (page: PageId) => void;
+  onLogout: () => void; // <-- Added Prop
 }
 
-export function SideNav({ activePage, setActivePage }: SideNavProps) {
+export function SideNav({ activePage, setActivePage, onLogout }: SideNavProps) {
   const [expanded, setExpanded] = useState(false);
 
   const navItems: { icon: React.ReactNode; label: string; page: PageId }[] = [
@@ -53,13 +54,26 @@ export function SideNav({ activePage, setActivePage }: SideNavProps) {
         ))}
       </nav>
 
-      <div className={`mt-auto w-full ${expanded ? 'px-3' : 'px-2'}`}>
+      {/* Bottom Actions Container */}
+      <div className={`mt-auto w-full flex flex-col gap-2 ${expanded ? 'px-3' : 'px-2'}`}>
         <button className={`h-10 flex items-center rounded-xl transition-all duration-300 group
               ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}
               text-muted hover:text-main hover:bg-panel hover:rotate-6
         `}>
           <div className="shrink-0 transition-transform group-hover:rotate-45 duration-300"><Settings size={20} /></div>
           {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">Settings</span>}
+        </button>
+        
+        {/* Logout Button */}
+        <button 
+          onClick={onLogout}
+          title={expanded ? '' : 'Log Out'}
+          className={`h-10 flex items-center rounded-xl transition-all duration-300 group
+              ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}
+              text-red-500/70 hover:text-red-500 hover:bg-red-500/10
+        `}>
+          <div className="shrink-0 transition-transform"><LogOut size={20} /></div>
+          {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">Log Out</span>}
         </button>
       </div>
     </aside>

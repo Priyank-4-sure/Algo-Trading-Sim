@@ -1,16 +1,21 @@
-import { Moon, Sun, Search, Bell, ChevronDown } from 'lucide-react';
+import { Moon, Sun, Search, Bell, ChevronDown, LogOut, User, ChevronRight } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
 interface TopNavProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
+  onLogout: () => void;
+  onProfileClick: () => void; // <-- Added Prop to route to Portfolio
 }
 
-export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
+export function TopNav({ darkMode, toggleDarkMode, onLogout, onProfileClick }: TopNavProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false); // <-- Added Profile State
   const [selectedPair, setSelectedPair] = useState('BTC/USD');
   const [searchQuery, setSearchQuery] = useState('');
+  
   const pickerRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null); // <-- Added Profile Ref
 
   const pairs = [
     { symbol: 'BTC/USD', name: 'Bitcoin', price: '$64,230.50', change: '+2.45%', icon: '₿', iconColor: 'bg-up' },
@@ -29,6 +34,9 @@ export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
     const handleClickOutside = (event: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
         setIsPickerOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -134,8 +142,49 @@ export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
         >
           {darkMode ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <div className="w-8 h-8 rounded-full bg-panel border border-main flex items-center justify-center text-main font-bold text-sm ml-2 shadow-sm shadow-white/5 hover:border-white/50 cursor-pointer transition-colors">
-          US
+        
+        {/* Account Dropdown Container */}
+        <div className="relative ml-2" ref={profileRef}>
+          <button 
+            onClick={() => setIsProfileOpen(!isProfileOpen)}
+            className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-sm shadow-sm transition-colors ${
+              isProfileOpen 
+                ? 'bg-main border-white text-panel' 
+                : 'bg-panel border-main text-main hover:border-white/50 shadow-white/5'
+            }`}
+          >
+            US
+          </button>
+
+          {isProfileOpen && (
+            <div className="absolute right-0 top-full mt-3 w-56 bg-main border border-main rounded-xl shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="p-3 border-b border-main bg-panel/30 rounded-t-xl mb-1">
+                 <p className="text-[10px] font-bold text-muted uppercase tracking-tighter leading-none mb-1">Authenticated as</p>
+                 <p className="text-sm font-bold text-main truncate">User Profile</p>
+              </div>
+              <div className="p-1.5 flex flex-col gap-0.5">
+                <button 
+                  onClick={() => {
+                    onProfileClick();
+                    setIsProfileOpen(false);
+                  }} 
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg transition-colors text-xs font-medium text-muted hover:text-main hover:bg-panel"
+                >
+                  <div className="flex items-center gap-2"><User size={14} /> See full profile</div>
+                  <ChevronRight size={14} className="opacity-50" />
+                </button>
+                <button 
+                  onClick={() => {
+                    onLogout();
+                    setIsProfileOpen(false);
+                  }} 
+                  className="w-full flex items-center gap-2 p-2.5 rounded-lg text-red-500 hover:bg-red-500/10 font-bold text-xs transition-colors"
+                >
+                  <LogOut size={14} /> Log Out
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>
