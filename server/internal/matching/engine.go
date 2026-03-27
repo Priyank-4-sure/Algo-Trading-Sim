@@ -8,7 +8,6 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 )
 
-
 // OrderBook represents the Bids and Asks for ONE specific stock
 type OrderBook struct {
 	// Key is Price. Value is a slice of Orders (queue)
@@ -21,16 +20,18 @@ type Engine struct {
 	// Books maps a Symbol (e.g., "TECH") to its specific OrderBook
 	Books map[string]*OrderBook
 
-	OrderStream <-chan models.Order       // Reads incoming orders
+	OrderStream <-chan models.Order        // Reads incoming orders
 	TradeStream chan<- models.TradeMessage // Sends out executed trades
+	LOBStream   chan<- models.LOBSnapshot  //Sends out LOB snapshot after every processed order
 }
 
 // NewEngine initializes the matching engine
-func NewEngine(orderStream <-chan models.Order, tradeStream chan<- models.TradeMessage) *Engine {
+func NewEngine(orderStream <-chan models.Order, tradeStream chan<- models.TradeMessage, lobStream chan<- models.LOBSnapshot) *Engine {
 	return &Engine{
 		Books:       make(map[string]*OrderBook),
 		OrderStream: orderStream,
 		TradeStream: tradeStream,
+		LOBStream:   lobStream,
 	}
 }
 
@@ -57,6 +58,43 @@ func (e *Engine) getBook(symbol string) *OrderBook {
 	return book
 }
 
+// emitLOBSnapshot builds and sends a LOBSnapshot to the storage layer
+func (e *Engine) emitLOBSnapshot(symbol string, book *OrderBook) {
+	bids := make([]models.PriceLevel, 0)
+	asks := make([]models.PriceLevel, 0)
+
+	for _, price := range e.getSortedPrices(book.Bids, false) {
+		bids = append(bids, models.PriceLevel{
+			Price:    price,
+			Quantity: e.getQueueVolume(book.Bids[price]),
+		})
+	}
+	for _, price := range e.getSortedPrices(book.Asks, true) {
+		asks = append(asks, models.PriceLevel{
+			Price:    price,
+			Quantity: e.getQueueVolume(book.Asks[price]),
+		})
+	}
+
+	var midPrice float64
+	if len(bids) > 0 && len(asks) > 0 {
+		midPrice = (bids[0].Price + asks[0].Price) / 2.0
+	}
+
+	snap := models.LOBSnapshot{
+		Symbol:   symbol,
+		Bids:     bids,
+		Asks:     asks,
+		MidPrice: midPrice,
+	}
+
+	// Non-blocking: drop snapshot if consumer is slow
+	select {
+	case e.LOBStream <- snap:
+	default:
+	}
+}
+
 // processOrder routes the order based on its Type
 func (e *Engine) processOrder(order models.Order) {
 	// Give the order a timestamp right as it hits the engine for strict Time priority
@@ -77,6 +115,7 @@ func (e *Engine) processOrder(order models.Order) {
 	}
 
 	// Print the updated Order Book state to the terminal
+	e.emitLOBSnapshot(order.Symbol, book)
 	e.logOrderBookState(order.Symbol, book)
 }
 
@@ -109,7 +148,7 @@ func (e *Engine) matchLimitOrder(newOrder models.Order, book *OrderBook) {
 			}
 			newOrder.Quantity = remainingQty
 			book.Bids[newOrder.Price] = append(book.Bids[newOrder.Price], newOrder)
-			log.Printf("[%s] Added to LOB: BUY %d @ ₹%.2f", newOrder.Symbol,remainingQty, newOrder.Price)
+			log.Printf("[%s] Added to LOB: BUY %d @ ₹%.2f", newOrder.Symbol, remainingQty, newOrder.Price)
 		}
 
 	} else if newOrder.Side == models.Sell {
@@ -177,7 +216,7 @@ func (e *Engine) cancelOrder(cancelReq models.Order, book *OrderBook) {
 			// Remove the order from the slice (Go slice trick)
 			sideMap[cancelReq.Price] = append(queue[:i], queue[i+1:]...)
 			log.Printf("Cancelled Order: %s", cancelReq.ID)
-			
+
 			// If the queue is now empty, delete the price level entirely
 			if len(sideMap[cancelReq.Price]) == 0 {
 				delete(sideMap, cancelReq.Price)
@@ -220,7 +259,7 @@ func (e *Engine) crossQueue(takerOrder *models.Order, remainingQty int64, priceL
 		}
 		e.TradeStream <- trade
 		log.Printf("[%s] TRADE: %d shares @ $%.2f",
-		takerOrder.Symbol, tradeQty, priceLevel)
+			takerOrder.Symbol, tradeQty, priceLevel)
 
 		// Reduce quantities
 		remainingQty -= tradeQty

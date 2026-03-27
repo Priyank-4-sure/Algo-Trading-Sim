@@ -6,9 +6,9 @@ import (
 	"log"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
+	"github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -67,7 +67,7 @@ func connectSQL(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	// Connect using GORM
 	db, err := gorm.Open(dialector, &gorm.Config{
 		// This prints all SQL queries to your terminal (great for development)
-		Logger: logger.Default.LogMode(logger.Info), 
+		Logger: logger.Default.LogMode(logger.Info),
 	})
 
 	return db, err

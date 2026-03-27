@@ -16,20 +16,27 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/database"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/handlers"
-	"github.com/coder/websocket"
-
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/matching"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/storage"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
+	"github.com/coder/websocket"
 )
 
 // Global channels
 var orderStream = make(chan models.Order, 1000)
 var tradeStream = make(chan models.TradeMessage, 1000)
 
+// NEW: snapshots from engine → Redis/Timescale
+var lobStream = make(chan models.LOBSnapshot, 500)
+
+// Store is the global financial-data store (TimescaleDB + Redis)
+var store *storage.Store
+
 // --------------------
 // Routes
 // --------------------
+
 func pingHandler(w http.ResponseWriter, r *http.Request) {
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("pong", nil))
 }
@@ -38,23 +45,26 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("healthy", time.Now()))
 }
 
-// handleOrder receives JSON from the user and pushes it into the Engine
+// handleOrder receives JSON and pushes it into the Engine + DB
 func handleOrder(w http.ResponseWriter, r *http.Request) {
 	var req models.Order
 
-	// Parse the JSON body into our Order struct
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid JSON", err))
 		return
 	}
 
-	// Validate basic fields
 	if req.ID == "" || req.Quantity <= 0 {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID, Symbol, or Quantity", nil))
+		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID or invalid Quantity", nil))
 		return
 	}
 
-	// Push the order into the channel to be processed by the Engine
+	// Store order in TimescaleDB (no auth yet, so user is anonymous)
+	if store != nil {
+		store.InsertOrder(req)
+	}
+
+	// Push into engine queue
 	orderStream <- req
 
 	response.WriteJson(w, http.StatusAccepted, map[string]interface{}{
@@ -67,12 +77,12 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 // --------------------
-// WebSocket Handler
+// WebSocket Handler (still echo stub)
 // --------------------
+
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// Allow all origins (DEV ONLY — restrict in prod)
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: true, // DEV ONLY
 	})
 	if err != nil {
 		log.Println("WS accept error:", err)
@@ -81,11 +91,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close(websocket.StatusInternalError, "internal error")
 
 	ctx := context.Background()
-
 	log.Println("Client connected")
 
 	for {
-		// Read message
 		_, msg, err := conn.Read(ctx)
 		if err != nil {
 			log.Println("Read error:", err)
@@ -94,9 +102,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("Received: %s\n", string(msg))
 
-		// Echo back
-		err = conn.Write(ctx, websocket.MessageText, msg)
-		if err != nil {
+		if err := conn.Write(ctx, websocket.MessageText, msg); err != nil {
 			log.Println("Write error:", err)
 			break
 		}
@@ -109,48 +115,50 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 // --------------------
 // Main
 // --------------------
-func main() {
 
+func main() {
+	// 1) Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
 	}
 
+	// 2) Init databases (Postgres, TimescaleDB, Redis)
 	dbConnections, err := database.Init(cfg)
-
 	if err != nil {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections)
+	// 3) Init financial storage (TimescaleDB + Redis) and run schema
+	if dbConnections.Candlestick == nil || dbConnections.Redis == nil {
+		log.Fatal("Candlestick DB or Redis connection is nil")
+	}
+	if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
+		log.Fatal("Failed to run storage schema migration:", err)
+	}
+	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
 
+	// 4) HTTP handlers scaffold (future use for DB-backed routes)
+	apphandlers := handlers.New(dbConnections)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend...")
 
-	// Initialize and Start the Matching Engine in the background
-	engine := matching.NewEngine(orderStream, tradeStream)
+	// 5) Matching engine: now takes lobStream too
+	engine := matching.NewEngine(orderStream, tradeStream, lobStream)
 	go engine.Start()
 
-	//Start a simple background worker to log trades as they happen
-	// (Later, this will be your WebSocket Broadcaster and Aggregator)
-	go func() {
-		for trade := range tradeStream {
-			log.Printf("[TRADE STREAM] [%s] Match ID: %s & %s | Qty: %d | Price: ₹%.2f",
-				trade.Symbol, trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Price)
-		}
-	}()
+	// 6) Start storage pipeline: consume trades + LOB snapshots
+	store.StartPipeline(tradeStream, lobStream)
 
-	// Routes
+	// 7) Routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
 	r.Get("/ws", wsHandler)
-
-	// post route to test manual orders
 	r.Post("/order", handleOrder)
 
+	// 8) HTTP server setup
 	address := ":" + strconv.Itoa(cfg.Server.Port)
-
 	server := &http.Server{
 		Addr:         address,
 		Handler:      r,
@@ -173,11 +181,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = server.Shutdown(ctx)
-
-	if err != nil {
+	if err := server.Shutdown(ctx); err != nil {
 		slog.Error("Server shutdown error:", slog.String("error", err.Error()))
 	}
-
 	slog.Info("Server stopped gracefully")
 }
