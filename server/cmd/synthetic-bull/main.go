@@ -13,21 +13,22 @@ import (
 	"time"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/api"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/auth"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/database"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/handlers"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/matching"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+	
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/noise"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/synthetic"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
 )
 
-// Global channels (Sized up based on your simulation needs)
-var orderStream = make(chan models.Order, 10000)
-var tradeStream = make(chan models.TradeMessage, 10000)
-var tickerTape = make(chan float64, 1000)
+// Global channels
+var orderStream = make(chan models.Order, 1000)
+var tradeStream = make(chan models.TradeMessage, 1000)
 
 // --------------------
 // Routes
@@ -51,7 +52,7 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate basic fields
-	if req.ID == "" || req.Quantity <= 0 {
+	if req.ID == "" || !req.Quantity.GreaterThan(models.Zero) {
 		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID, Symbol, or Quantity", nil))
 		return
 	}
@@ -67,6 +68,8 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 		"details":  req,
 	})
 }
+
+// wsHandler removed (now handled in internal/handlers/ws.go)
 
 // --------------------
 // Main
@@ -87,39 +90,46 @@ func main() {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections)
+	// 2. Initialize Firebase Admin SDK for token verification
+	if err := auth.InitFirebase(); err != nil {
+		log.Printf("⚠️  WARNING: Firebase Admin SDK failed to initialize: %v", err)
+		log.Println("   → Firebase login will be disabled. Ensure firebase-adminsdk.json exists in the server root.")
+		// Non-fatal — app works without Firebase if users use /auth/login instead
+	}
+
+	// Initialize LOB broadcast channel (engine → handlers → WS clients)
+	lobBroadcast := make(chan interface{}, 1000)
+
+	apphandlers := handlers.New(dbConnections, orderStream, tradeStream, lobBroadcast)
+
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
 
-	// 2. Start the Matching Engine
-	engine := matching.NewEngine(orderStream, tradeStream)
+	// Initialize and Start the Matching Engine in the background
+	engine := matching.NewEngine(orderStream, tradeStream, lobBroadcast)
 	go engine.Start()
 
-	// 3. Start the Trade Consumer (The Ticker Tape Broadcaster)
-	// 3. Start the Trade Consumer
+	// Initialize Simulator Components
+	symbol := "BTC/USD"
+	tickerTape := make(chan float64, 1000)
+
+	marketManager := gbm.NewMarketManager()
+	marketManager.AddAsset(symbol, "crypto", 64230.50)
+
+	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
+	go marketMaker.Start([]string{symbol}, 500*time.Millisecond)
+
+	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
+	go noiseTrader.Start([]string{symbol}, 24*time.Hour)
+
+	//Start a simple background worker to log trades as they happen
+	// (Later, this will be your WebSocket Broadcaster and Aggregator)
 	go func() {
 		for trade := range tradeStream {
-			log.Printf("✅ [TRADE EXECUTED] Match ID: %s & %s | %d shares of %s @ ₹%.2f",
-				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
-
-			// --- NEW: PUBLISH THE TRADE TO REDIS ---
-			// We format a fake orderbook payload just for testing the pipe
-			priceStr := strconv.FormatFloat(trade.Price, 'f', 2, 64)
-			qtyStr := strconv.FormatInt(trade.Quantity, 10)
+			/*log.Printf("[TRADE STREAM] [%s] Match ID: %s & %s | Qty: %d | Price: ₹%.2f",
+			trade.Symbol, trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Price)*/
 			
-			fakeUpdate := models.OrderbookUpdate{
-				Symbol: trade.Symbol,
-				Bids: [][]string{{priceStr, qtyStr}},
-				Asks: [][]string{},
-			}
-			
-			payload, _ := json.Marshal(fakeUpdate)
-			
-			// Publish to the channel the WebSocket is listening to
-			dbConnections.Redis.Publish(context.Background(), "orderbook:"+trade.Symbol, payload)
-			// ---------------------------------------
-
 			select {
 			case tickerTape <- trade.Price:
 			default:
@@ -127,34 +137,11 @@ func main() {
 		}
 	}()
 
-	// 4. Start the GBM Market Manager (Physics Engine)
-	marketManager := gbm.NewMarketManager()
-	symbol := "TECH"
-	marketManager.AddAsset(symbol, "BLUE_CHIP", 100.00)
-
-	time.Sleep(50 * time.Millisecond) // Let engine bootstrap
-
-	// 5. Start the Synthetic Market Maker (Liquidity Provider)
-	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
-	go marketMaker.Start([]string{symbol}, 100*time.Millisecond)
-
-	// 6. Start the Noise Trader (Retail/Whale Flow)
-	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
-	go noiseTrader.Start([]string{symbol}, 8*time.Hour)
-
-	// 7. Watch the Fair Value drift (Diagnostics)
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			price := marketManager.GetPrice(symbol)
-			log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", symbol, price)
-		}
-	}()
-
 	// 8. Register HTTP/WS Routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
+
+	// post route to test manual orders
 	r.Post("/order", handleOrder)
 
 	// 9. Configure and Start HTTP Server
@@ -197,4 +184,22 @@ func main() {
 	}
 
 	slog.Info("Server stopped gracefully. Goodbye!")
+}
+
+func bootstrapSystemMM(db *database.Connections) {
+	username := "SYSTEM_MM"
+	var user models.User
+	if err := db.Primary.Where("username = ?", username).First(&user).Error; err != nil {
+		log.Printf("[BOOTSTRAP] Creating %s user...", username)
+		user = models.User{
+			Username:    username,
+			FirebaseUID: "system_mm_uid",
+		}
+		db.Primary.Create(&user)
+
+		// Give them massive balances for market making
+		db.Primary.Create(&models.Portfolio{UserID: user.ID, Asset: "USD", Balance: 1000000000})
+		db.Primary.Create(&models.Portfolio{UserID: user.ID, Asset: "BTC", Balance: 1000000})
+		db.Primary.Create(&models.Portfolio{UserID: user.ID, Asset: "ETH", Balance: 10000000})
+	}
 }
