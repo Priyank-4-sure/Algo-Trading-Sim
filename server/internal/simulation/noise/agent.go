@@ -2,7 +2,6 @@ package noise
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 
@@ -75,22 +74,29 @@ func (a *Agent) Start(symbols []string, sessionDuration time.Duration) {
 			}
 
 			// 4. Generate Order
-			side := DetermineOrderSide(a.rng, deltaS, kSensitivity, contrarianChance)
+			sideStr := DetermineOrderSide(a.rng, deltaS, kSensitivity, contrarianChance)
+			side := models.SideBuy
+			if sideStr == "SELL" {
+				side = models.SideSell
+			}
 			quantity := GenerateOrderSize(a.rng, paretoAlpha, minOrderSize)
 
 			order := models.Order{
-				ID:        generateOrderID(),
-				Symbol:    symbol,
-				Side:      models.Side(side),
-				Quantity:  quantity,
-				Type:      models.Market,
-				Timestamp: time.Now().UnixNano(),
+				ID:          generateOrderID(),
+				Symbol:      symbol,
+				Side:        side,
+				Quantity:    models.NewDecimal(float64(quantity), 2),
+				OriginalQty: models.NewDecimal(float64(quantity), 2),
+				OrderType:   models.OrderTypeMarket,
+				TIF:         models.TIFGTC,
+				IsActive:    true,
+				Timestamp:   time.Now().UnixNano(),
 			}
 			
 			// 5. Fire Order
 			select {
 			case a.orderStream <- order:
-				log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, marketPrice)
+				// log.Printf("🌪️ [NOISE TRADER] Fired %d MARKET order for %s shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity.String(), order.Symbol, marketPrice)
 			default:
 				// Drop if engine is completely backed up
 			}

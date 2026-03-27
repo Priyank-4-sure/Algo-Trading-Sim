@@ -1,14 +1,19 @@
-import { Moon, Sun, Search, Bell, ChevronDown } from 'lucide-react';
+import { Moon, Sun, Search, Bell, ChevronDown, LogOut } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { useWebSocket } from '../../contexts/WebSocketContext';
+import type { PageId } from '../../App';
 
 interface TopNavProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
+  setActivePage: (page: PageId) => void;
+  activePage: PageId;
+  previousPage: PageId;
 }
 
-export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
+export function TopNav({ darkMode, toggleDarkMode, setActivePage, activePage, previousPage }: TopNavProps) {
+  const { logout, selectedSymbol, setSelectedSymbol } = useWebSocket();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [selectedPair, setSelectedPair] = useState('BTC/USD');
   const [searchQuery, setSearchQuery] = useState('');
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +53,7 @@ export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
                 : 'border-main bg-main/50 hover:border-white/50'}`}
           >
             <Search size={14} className={`${isPickerOpen ? 'text-main' : 'text-muted group-hover:text-main'}`} />
-            <span className="flex-1 text-left text-sm font-bold text-main">{selectedPair}</span>
+            <span className="flex-1 text-left text-sm font-bold text-main">{selectedSymbol}</span>
             <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
           </button>
 
@@ -78,7 +83,7 @@ export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
                   <button
                     key={pair.symbol}
                     onClick={() => {
-                      setSelectedPair(pair.symbol);
+                      setSelectedSymbol(pair.symbol);
                       setIsPickerOpen(false);
                     }}
                     className="w-full flex items-center justify-between p-3 hover:bg-panel transition-colors group"
@@ -96,7 +101,7 @@ export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
                       <span className="text-xs font-mono font-bold text-main">{pair.price}</span>
                       <span className={`text-[10px] font-bold ${pair.change.startsWith('+') ? 'text-up' : 'text-down'}`}>{pair.change}</span>
                     </div>
-                    {selectedPair === pair.symbol && <div className="ml-2 w-1.5 h-1.5 rounded-full bg-white" />}
+                    {selectedSymbol === pair.symbol && <div className="ml-2 w-1.5 h-1.5 rounded-full bg-white" />}
                   </button>
                 ))}
                 {filteredPairs.length === 0 && (
@@ -134,7 +139,24 @@ export function TopNav({ darkMode, toggleDarkMode }: TopNavProps) {
         >
           {darkMode ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <div className="w-8 h-8 rounded-full bg-panel border border-main flex items-center justify-center text-main font-bold text-sm ml-2 shadow-sm shadow-white/5 hover:border-white/50 cursor-pointer transition-colors">
+        <button
+          onClick={logout}
+          className="p-2 rounded-full hover:bg-down/20 transition-colors text-muted hover:text-down"
+          title="Log Out"
+        >
+          <LogOut size={18} />
+        </button>
+        <div 
+          onClick={() => {
+            if (activePage === 'profile') {
+              setActivePage(previousPage);
+            } else {
+              setActivePage('profile');
+            }
+          }}
+          className={`w-8 h-8 rounded-full bg-panel border flex items-center justify-center text-main font-bold text-sm ml-2 shadow-sm shadow-white/5 cursor-pointer transition-colors ${activePage === 'profile' ? 'border-up shadow-up/20' : 'border-main hover:border-white/50'}`}
+          title={activePage === 'profile' ? "Return to Trading" : "User Profile"}
+        >
           US
         </div>
       </div>
