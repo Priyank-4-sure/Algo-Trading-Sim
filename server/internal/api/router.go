@@ -17,7 +17,7 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 	// API Version 1
 	r.Route("/v1", func(r chi.Router) {
 		// all routes will be defined here, e.g.:
-		
+		r.Get("/ws", h.HandleWebSocket) // WebSocket endpoint
 	})
 
 	return r
