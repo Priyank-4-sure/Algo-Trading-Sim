@@ -4,49 +4,82 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 )
 
-// OrderNode is a node in the per-price doubly linked list.
-// It wraps a pointer into the LOB's direct-mapped slice to allow O(1) cancel lookups.
-//
-// Architecture note: We use the HFT direct-mapped array (lob.go) as the primary storage
-// for price levels. OrderNode / OrderIndex is an overlay map: orderID → (priceIdx, sliceIdx)
-// so CancelOrder is O(1) instead of O(N scan).
 type OrderNode struct {
-	Order    *models.Order // Pointer into OrderSide.Queue.Queues[priceIdx] slice
-	PriceIdx int           // Which price bucket the order lives in
-	QueueIdx int           // Which index within that bucket slice
+	Order models.Order
+	Prev  *OrderNode
+	Next  *OrderNode
 }
 
-// OrderIndex is a map from order ID to its location, enabling O(1) cancellation.
-// It is stored in the Engine (one per symbol book) rather than in OrderBook to keep
-// the HFT OrderBook zero-allocation on the hot path.
-type OrderIndex map[string]*OrderNode
-
-// NewOrderIndex creates a fresh OrderIndex.
-func NewOrderIndex() OrderIndex {
-	return make(OrderIndex)
+type OrderQueue struct {
+	Head *OrderNode
+	Tail *OrderNode
+	Size int64
 }
 
-// Track registers an order into the index. Must be called after the order is appended
-// to the LOB direct-mapped array.
-func (idx OrderIndex) Track(order *models.Order, priceIdx int, queueIdx int) {
-	idx[order.ID] = &OrderNode{
-		Order:    order,
-		PriceIdx: priceIdx,
-		QueueIdx: queueIdx,
+func (q *OrderQueue) Push(o models.Order) *OrderNode{
+	var node *OrderNode = &OrderNode{
+		Order: o,
+	}
+	if q.Tail == nil {
+		q.Head = node
+		q.Tail = node
+	}else{
+		node.Prev = q.Tail
+		q.Tail.Next = node
+		q.Tail = node
+	}
+	q.Size++
+	return node
+}
+
+func (q *OrderQueue) Front() *OrderNode {
+    return q.Head
+}
+
+func (q *OrderQueue) PopFront() {
+    if q.Head == nil {
+        return
+    }
+	old := q.Head
+    q.Head = q.Head.Next
+    if q.Head != nil {
+        q.Head.Prev = nil
+    } else {
+        q.Tail = nil
+    }
+	old.Next=nil
+	if q.Size > 0 {
+    	q.Size--
 	}
 }
 
-// Forget removes an order from the index (e.g. after fill or cancel).
-func (idx OrderIndex) Forget(orderID string) {
-	delete(idx, orderID)
+func (q *OrderQueue) Remove(node *OrderNode) {
+    if node == nil {
+        return
+    }
+    
+	if node.Prev != nil {
+        node.Prev.Next = node.Next
+    } else {
+        q.Head = node.Next
+    }
+    
+	if node.Next != nil {
+        node.Next.Prev = node.Prev
+    }else {
+        q.Tail = node.Prev
+    }
+
+	node.Next=nil
+	node.Prev=nil
+	if q.Size > 0 {
+    	q.Size--
+	}
 }
 
-// Lookup finds the node for an order ID. Returns nil if not found.
-func (idx OrderIndex) Lookup(orderID string) *OrderNode {
-	return idx[orderID]
+func (q *OrderQueue) Empty() bool {
+    return q.Head == nil
 }
 
-// these functions allow push, cancel order in O(1) time
-// combined with the direct-mapped array they give best-of-both worlds:
-//   - O(1) price level access (direct-mapped array)
-//   - O(1) cancel by order ID (OrderIndex map)
+// these functions alows us to push order, pop order (dequeue),cancel order in O(1) time, whereas before it was O(N)
+// we need to keep a map[orderid]->pointer to node so that it woks in O(1)

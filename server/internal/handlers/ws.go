@@ -92,14 +92,3 @@ func (h *Handler) streamOrderbook(ctx context.Context, c *websocket.Conn, topic 
 }
 
 func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic string) {}
-
-// lobBroadcastWorker receives LOBSnapshot messages from the matching engine and
-// fans them out to ALL connected WebSocket clients as "lob_update" action messages.
-// This is the direct real-data pipeline: MatchingEngine → LOBBroadcast channel → WS clients.
-func (h *Handler) lobBroadcastWorker() {
-	log.Println("📡 LOB Broadcast Worker started — streaming real-time order book to clients")
-	for msg := range h.LOBBroadcast {
-		h.Broadcast("lob_update", msg)
-	}
-}
-

@@ -11,7 +11,6 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 )
 
 // Connections acts as a container for all our database pools
@@ -28,14 +27,6 @@ func Init(cfg *config.AppConfig) (*Connections, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to primary DB: %w", err)
 	}
-
-	// 1a. Run Core AutoMigrations
-	if err := primaryDB.AutoMigrate(&models.User{}, &models.Portfolio{}); err != nil {
-		log.Printf("⚠️ Warning: AutoMigrate failed on primary DB: %v", err)
-	} else {
-		log.Println("✅ Primary Database schemas migrated successfully!")
-	}
-
 	log.Println("✅ Primary Database connected!")
 
 	// 2. Connect to Candlestick DB (TimescaleDB)
@@ -75,8 +66,8 @@ func connectSQL(cfg config.DatabaseConfig) (*gorm.DB, error) {
 
 	// Connect using GORM
 	db, err := gorm.Open(dialector, &gorm.Config{
-		// Set to Error to avoid flooding the terminal with SQL logs
-		Logger: logger.Default.LogMode(logger.Error), 
+		// This prints all SQL queries to your terminal (great for development)
+		Logger: logger.Default.LogMode(logger.Info), 
 	})
 
 	return db, err
