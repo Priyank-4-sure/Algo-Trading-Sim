@@ -59,10 +59,10 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 	oldOrders := mm.activeOrders[symbol]
 	for _, oldOrder := range oldOrders {
 		cancelReq := models.Order{
-			ID:        oldOrder.ID,
-			OrderType: 3, // OrderTypeCancel
-			Side:      oldOrder.Side,
-			Symbol:    symbol,
+			ID:    oldOrder.ID,
+			Type:  models.Cancel,
+			Side:  oldOrder.Side,
+			Price: oldOrder.Price,
 		}
 		mm.orderStream <- cancelReq
 	}
@@ -71,8 +71,8 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 	mm.activeOrders[symbol] = make([]models.Order, 0)
 
 	// 3. Generate the new ladder
-	// We will create 15 levels of depth on both sides to fill the UI
-	levels := 15
+	// We will create 5 levels of depth on both sides
+	levels := 5
 	tickSize := 0.05 // e.g., prices move in chunks of ₹0.05
 	
 	// Round the fair price to the nearest tick (e.g., 100.03 becomes 100.05)
@@ -84,29 +84,23 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 		// Generate BIDS (Lower than fair price)
 		bidPrice := centerPrice - (float64(i) * tickSize)
 		bidOrder := models.Order{
-			ID:          mm.generateID("BID"),
-			Symbol:      symbol,
-			OrderType:   models.OrderTypeLimit,
-			Side:        models.SideBuy,
-			Price:       models.NewDecimal(bidPrice, 2),
-			Quantity:    models.NewDecimal(float64(qty), 2),
-			OriginalQty: models.NewDecimal(float64(qty), 2),
-			TIF:         models.TIFGTC,
-			IsActive:    true,
+			ID:       mm.generateID("BID"),
+			Symbol:   symbol,
+			Type:     models.Limit,
+			Side:     models.Buy,
+			Price:    math.Round(bidPrice*100) / 100, // Round to 2 decimals
+			Quantity: qty,
 		}
 		
 		// Generate ASKS (Higher than fair price)
 		askPrice := centerPrice + (float64(i) * tickSize)
 		askOrder := models.Order{
-			ID:          mm.generateID("ASK"),
-			Symbol:      symbol,
-			OrderType:   models.OrderTypeLimit,
-			Side:        models.SideSell,
-			Price:       models.NewDecimal(askPrice, 2),
-			Quantity:    models.NewDecimal(float64(qty), 2),
-			OriginalQty: models.NewDecimal(float64(qty), 2),
-			TIF:         models.TIFGTC,
-			IsActive:    true,
+			ID:       mm.generateID("ASK"),
+			Symbol:   symbol,
+			Type:     models.Limit,
+			Side:     models.Sell,
+			Price:    math.Round(askPrice*100) / 100,
+			Quantity: qty,
 		}
 
 		// Save them to active tracking and send them to the matching engine

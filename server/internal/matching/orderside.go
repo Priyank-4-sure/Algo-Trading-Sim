@@ -1,56 +1,68 @@
 package matching
 
-// orderside.go — Price ordering utilities for the HFT LOB
-//
-// The pulled version used a TreeSet (github.com/hashicorp/go-set) with float64 prices.
-// The HFT architecture (lob.go) uses a sorted []int slice of price indices with a
-// direct-mapped array for O(1) access. This file provides the comparison helpers
-// and BestPrice helpers that work WITH the lob.go OrderSide — keeping the pull's
-// intent (sorted price levels, bid/ask direction) while using the HFT structures.
+import (
+	set "github.com/hashicorp/go-set"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+)
 
-// BestAskPrice returns the lowest ask price index or 0 if no asks.
-func BestAskPrice(os *OrderSide) (int, bool) {
-	if len(os.Prices) == 0 {
-		return 0, false
-	}
-	// Asks are sorted ascending (lowest first) — best is index 0
-	return os.Prices[0], true
+type OrderSide struct {
+	Prices  map[float64]*OrderQueue
+	Ordered *set.TreeSet[float64, set.Compare[float64]]
 }
 
-// BestBidPrice returns the highest bid price index or 0 if no bids.
-func BestBidPrice(os *OrderSide) (int, bool) {
-	if len(os.Prices) == 0 {
-		return 0, false
-	}
-	// Bids are sorted descending (highest first) — best is index 0
-	return os.Prices[0], true
+func NewOrderSide(isBid bool) *OrderSide {
+    var cmp set.Compare[float64]
+
+    if isBid {
+        // Bids → highest price first
+        cmp = func(a, b float64) int {
+            if a > b { return -1 }
+            if a < b { return 1 }
+            return 0
+        }
+    } else {
+        // Asks → lowest price first
+        cmp = func(a, b float64) int {
+            if a < b { return -1 }
+            if a > b { return 1 }
+            return 0
+        }
+    }
+
+    return &OrderSide{
+        Prices:  make(map[float64]*OrderQueue),
+        Ordered: set.NewTreeSet(cmp),
+    }
 }
 
-// BestPrice returns the best price index for either side.
-// For asks: lowest price. For bids: highest price.
-func BestPrice(os *OrderSide) (int, bool) {
-	if os.IsBid {
-		return BestBidPrice(os)
-	}
-	return BestAskPrice(os)
+func (os *OrderSide) Add(order models.Order, index map[string]*OrderNode) {
+    q, ok := os.Prices[order.Price]
+    if !ok {
+        q = &OrderQueue{}
+        os.Prices[order.Price] = q
+        os.Ordered.Insert(order.Price)
+    }
+    node := q.Push(order)
+    index[order.ID] = node
 }
 
-// NextAskPrice returns the next ask price index above the given one.
-func NextAskPrice(os *OrderSide, above int) (int, bool) {
-	for _, p := range os.Prices {
-		if p > above {
-			return p, true
-		}
-	}
-	return 0, false
+func (os *OrderSide) BestPrice() (float64, bool) {
+    if os.Ordered.Empty() {
+        return 0, false
+    }
+    return os.Ordered.Min(), true
 }
 
-// NextBidPrice returns the next bid price index below the given one.
-func NextBidPrice(os *OrderSide, below int) (int, bool) {
-	for _, p := range os.Prices {
-		if p < below {
-			return p, true
-		}
-	}
-	return 0, false
+func (os *OrderSide) NextPrice(price float64) (float64, bool) {
+    next, ok := os.Ordered.FirstAbove(price)
+    return next, ok
+}
+
+func (os *OrderSide) RemovePriceLevel(price float64) {
+    delete(os.Prices, price)
+    os.Ordered.Remove(price)
+}
+
+func (os *OrderSide) GetQueue(price float64) *OrderQueue {
+    return os.Prices[price]
 }

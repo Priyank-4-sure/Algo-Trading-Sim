@@ -97,11 +97,7 @@ export function AnalyticsPage() {
                         ${(value / 1000).toFixed(1)}k
                       </div>
                       <div
-                        className={`w-full rounded-t-sm transition-all ${
-                          isLast 
-                            ? 'bg-up shadow-[0_0_15px_rgba(34,197,94,0.6)]' 
-                            : 'bg-gradient-to-t from-green-600/10 to-green-500/30 border border-b-0 border-green-500/30 hover:to-green-400/50 hover:border-green-400/50'
-                        }`}
+                        className={`w-full rounded-t-sm transition-all ${isLast ? 'bg-up' : 'bg-panel border border-b-0 border-main hover:bg-up/50 hover:border-white/20'}`}
                         style={{ height: `${Math.max(height, 5)}%` }}
                       />
                     </div>
@@ -116,30 +112,14 @@ export function AnalyticsPage() {
             {/* Daily P&L Panel */}
             <div className="flex-1 glass-panel rounded-none flex flex-col overflow-hidden shadow-none p-5 border-none border-r border-main border-t lg:border-t-0">
               <div className="font-semibold text-sm font-display mb-4">Daily P&L (14D)</div>
-              <div className="flex-1 w-full h-full min-h-[140px] flex items-center justify-between gap-1.5 py-4 relative">
-                {/* Center baseline indicator */}
-                <div className="absolute top-1/2 left-0 right-0 h-px bg-white/10 -translate-y-px pointer-events-none" />
-                
+              <div className="flex-1 flex items-end justify-between gap-1.5 pt-4">
                 {dailyPnL.map((pnl, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center justify-center h-full group relative">
-                    {/* Tooltip on hover */}
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 px-2 py-1 rounded text-[10px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-xl border border-white/20">
-                      {pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}
-                    </div>
-                    
-                    {/* Top Half (Positive Zone) */}
-                    <div className="w-full h-1/2 flex flex-col justify-end items-center">
-                      {pnl >= 0 && (
-                        <div className="w-[80%] bg-up rounded-t-sm hover:brightness-125 transition-all shadow-[0_0_10px_rgba(34,197,94,0.3)]" style={{ height: `${Math.max((pnl / 1000) * 100, 8)}%` }} />
-                      )}
-                    </div>
-                    
-                    {/* Bottom Half (Negative Zone) */}
-                    <div className="w-full h-1/2 flex flex-col justify-start items-center">
-                      {pnl < 0 && (
-                        <div className="w-[80%] bg-down rounded-b-sm hover:brightness-125 transition-all shadow-[0_0_10px_rgba(239,68,68,0.3)]" style={{ height: `${Math.max(Math.abs(pnl) / 1000 * 100, 8)}%` }} />
-                      )}
-                    </div>
+                  <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                    {pnl >= 0 ? (
+                      <div className="w-full bg-up/80 rounded-t-sm hover:brightness-125 transition-all" style={{ height: `${(pnl / 1000) * 100}%` }} />
+                    ) : (
+                      <div className="w-full bg-down/80 rounded-b-sm hover:brightness-125 transition-all absolute top-full" style={{ height: `${Math.abs(pnl) / 1000 * 100}%` }} />
+                    )}
                   </div>
                 ))}
               </div>
