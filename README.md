@@ -156,7 +156,7 @@ curl http://localhost:8080/health
 ### Step 6: WebSocket Endpoint
 
 ```
-ws://localhost:8080/ws
+ws://localhost:8080/v1/ws
 ```
 
 Use Postman or any WebSocket client to test real-time communication.
@@ -173,13 +173,16 @@ backend/
 ├── internal/
 │   ├── matching/
 │   ├── simulation/
-│   ├── transport/
-│   │   ├── http/
-│   │   └── websocket/
+│   ├── api/
+│       └── router.go
+│   ├── handlers
 │   ├── auth/
-│   ├── user/
-│   ├── store/
+│   ├── config/
+│   ├── utils/
+│       └── response
+│   ├── database
 │   └── models/
+│
 ```
 
 ---
