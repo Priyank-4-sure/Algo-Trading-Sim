@@ -2,40 +2,44 @@ package matching
 
 import (
 	"log"
-	"sort"
 	"time"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 )
 
-// OrderBook represents the Bids and Asks for ONE specific stock
+// ---- Data Structures ----
+
 type OrderBook struct {
-	// Key is Price. Value is a slice of Orders (queue)
-	Bids map[float64][]models.Order // Bids (Buyers)
-	Asks map[float64][]models.Order // Asks (Sellers)
+	Bids *OrderSide
+	Asks *OrderSide
 }
 
-// Engine holds the Limit Order Book and channels
 type Engine struct {
-	// Books maps a Symbol (e.g., "TECH") to its specific OrderBook
-	Books map[string]*OrderBook
-
-	OrderStream <-chan models.Order        // Reads incoming orders
-	TradeStream chan<- models.TradeMessage // Sends out executed trades
-	LOBStream   chan<- models.LOBSnapshot  //Sends out LOB snapshot after every processed order
+	Books       map[string]*OrderBook
+	OrderIndex  map[string]*OrderNode
+	OrderStream <-chan models.Order
+	TradeStream chan<- models.TradeMessage
+	LOBStream   chan<- models.LOBSnapshot
 }
 
-// NewEngine initializes the matching engine
-func NewEngine(orderStream <-chan models.Order, tradeStream chan<- models.TradeMessage, lobStream chan<- models.LOBSnapshot) *Engine {
+// ---- Constructor ----
+
+func NewEngine(
+	orderStream <-chan models.Order,
+	tradeStream chan<- models.TradeMessage,
+	lobStream chan<- models.LOBSnapshot,
+) *Engine {
 	return &Engine{
 		Books:       make(map[string]*OrderBook),
+		OrderIndex:  make(map[string]*OrderNode),
 		OrderStream: orderStream,
 		TradeStream: tradeStream,
 		LOBStream:   lobStream,
 	}
 }
 
-// Start runs an infinite loop waiting for new orders
+// ---- Engine Loop ----
+
 func (e *Engine) Start() {
 	log.Println("Matching Engine Started...")
 	for order := range e.OrderStream {
@@ -43,66 +47,12 @@ func (e *Engine) Start() {
 	}
 }
 
-// getBook safely retrieves an OrderBook for a symbol, or creates one if it doesn't exist
-func (e *Engine) getBook(symbol string) *OrderBook {
-	book, exists := e.Books[symbol]
-	if !exists {
-		// First time seeing this stock! Create a new book for it.
-		book = &OrderBook{
-			Bids: make(map[float64][]models.Order),
-			Asks: make(map[float64][]models.Order),
-		}
-		e.Books[symbol] = book
-		log.Printf("Created new Order Book for symbol: %s", symbol)
-	}
-	return book
-}
+// ---- Order Processing ----
 
-// emitLOBSnapshot builds and sends a LOBSnapshot to the storage layer
-func (e *Engine) emitLOBSnapshot(symbol string, book *OrderBook) {
-	bids := make([]models.PriceLevel, 0)
-	asks := make([]models.PriceLevel, 0)
-
-	for _, price := range e.getSortedPrices(book.Bids, false) {
-		bids = append(bids, models.PriceLevel{
-			Price:    price,
-			Quantity: e.getQueueVolume(book.Bids[price]),
-		})
-	}
-	for _, price := range e.getSortedPrices(book.Asks, true) {
-		asks = append(asks, models.PriceLevel{
-			Price:    price,
-			Quantity: e.getQueueVolume(book.Asks[price]),
-		})
-	}
-
-	var midPrice float64
-	if len(bids) > 0 && len(asks) > 0 {
-		midPrice = (bids[0].Price + asks[0].Price) / 2.0
-	}
-
-	snap := models.LOBSnapshot{
-		Symbol:   symbol,
-		Bids:     bids,
-		Asks:     asks,
-		MidPrice: midPrice,
-	}
-
-	// Non-blocking: drop snapshot if consumer is slow
-	select {
-	case e.LOBStream <- snap:
-	default:
-	}
-}
-
-// processOrder routes the order based on its Type
 func (e *Engine) processOrder(order models.Order) {
-	// Give the order a timestamp right as it hits the engine for strict Time priority
 	if order.Timestamp == 0 {
 		order.Timestamp = time.Now().UnixNano()
 	}
-
-	// Fetch the specific order book for this stock
 	book := e.getBook(order.Symbol)
 
 	switch order.Type {
@@ -114,192 +64,212 @@ func (e *Engine) processOrder(order models.Order) {
 		e.cancelOrder(order, book)
 	}
 
-	// Print the updated Order Book state to the terminal
 	e.emitLOBSnapshot(order.Symbol, book)
 	e.logOrderBookState(order.Symbol, book)
 }
 
-// ---------------------------------------------------------
-// MATCHING LOGIC (Now operates on a specific 'book')
-// ---------------------------------------------------------
+// ---- Book Management ----
 
-func (e *Engine) matchLimitOrder(newOrder models.Order, book *OrderBook) {
-	remainingQty := newOrder.Quantity
-
-	if newOrder.Side == models.Buy {
-		// 1. Find all available Ask prices and sort them Lowest to Highest
-		askPrices := e.getSortedPrices(book.Asks, true) // true = ascending
-
-		// 2. Loop through the best prices until the order is filled or prices are too high
-		for _, price := range askPrices {
-			// Stop if the seller wants more money than the buyer is willing to pay
-			if price > newOrder.Price || remainingQty == 0 {
-				break
-			}
-
-			// 3. Match against the queue at this specific price
-			remainingQty = e.crossQueue(&newOrder, remainingQty, price, book.Asks)
+func (e *Engine) getBook(symbol string) *OrderBook {
+	book, exists := e.Books[symbol]
+	if !exists {
+		book = &OrderBook{
+			Bids: NewOrderSide(true),
+			Asks: NewOrderSide(false),
 		}
+		e.Books[symbol] = book
+		log.Printf("Created new Order Book for symbol: %s", symbol)
+	}
+	return book
+}
 
-		// 4. If the order isn't fully filled, add it to the resting Bids
-		if remainingQty > 0 {
-			if remainingQty < newOrder.Quantity {
-				log.Printf("[%s] WARNING: Limit order %s partially filled. %d shares remaining added to LOB.", newOrder.Symbol, newOrder.ID, remainingQty)
-			}
-			newOrder.Quantity = remainingQty
-			book.Bids[newOrder.Price] = append(book.Bids[newOrder.Price], newOrder)
-			log.Printf("[%s] Added to LOB: BUY %d @ ₹%.2f", newOrder.Symbol, remainingQty, newOrder.Price)
+// ---- Matching Logic ----
+
+func (e *Engine) matchLimitOrder(order models.Order, book *OrderBook) {
+	switch order.Side {
+	case models.Buy:
+		remaining := e.match(order, book.Asks)
+		if remaining > 0 {
+			order.Quantity = remaining
+			book.Bids.Add(order, e.OrderIndex)
 		}
-
-	} else if newOrder.Side == models.Sell {
-		// Inverse logic for Sellers matching against Buyers
-		bidPrices := e.getSortedPrices(book.Bids, false) // false = descending (Highest price first)
-
-		for _, price := range bidPrices {
-			// Stop if the buyer is offering less money than the seller wants
-			if price < newOrder.Price || remainingQty == 0 {
-				break
-			}
-			remainingQty = e.crossQueue(&newOrder, remainingQty, price, book.Bids)
-		}
-
-		if remainingQty > 0 {
-			if remainingQty < newOrder.Quantity {
-				log.Printf("[%s] WARNING: Limit order %s partially filled. %d shares remaining added to LOB.", newOrder.Symbol, newOrder.ID, remainingQty)
-			}
-			newOrder.Quantity = remainingQty
-			book.Asks[newOrder.Price] = append(
-				book.Asks[newOrder.Price], newOrder)
-			log.Printf("[%s] Added to LOB: SELL %d @ ₹%.2f", newOrder.Symbol, remainingQty, newOrder.Price)
+	case models.Sell:
+		remaining := e.match(order, book.Bids)
+		if remaining > 0 {
+			order.Quantity = remaining
+			book.Asks.Add(order, e.OrderIndex)
 		}
 	}
 }
 
-func (e *Engine) matchMarketOrder(newOrder models.Order, book *OrderBook) {
-	remainingQty := newOrder.Quantity
-
-	if newOrder.Side == models.Buy {
-		// Buy Market orders just eat the cheapest Asks until filled
-		askPrices := e.getSortedPrices(book.Asks, true)
-		for _, price := range askPrices {
-			if remainingQty == 0 {
-				break
-			}
-			remainingQty = e.crossQueue(&newOrder, remainingQty, price, book.Asks)
+func (e *Engine) matchMarketOrder(order models.Order, book *OrderBook) {
+	switch order.Side {
+	case models.Buy:
+		remaining := e.match(order, book.Asks)
+		if remaining > 0 {
+			log.Printf("[%s] Market BUY not fully filled (%d remaining — no liquidity)", order.Symbol, remaining)
 		}
-	} else {
-		// Sell Market orders eat the highest Bids until filled
-		bidPrices := e.getSortedPrices(book.Bids, false)
-		for _, price := range bidPrices {
-			if remainingQty == 0 {
-				break
-			}
-			remainingQty = e.crossQueue(&newOrder, remainingQty, price, book.Bids)
-		}
-	}
-
-	if remainingQty > 0 {
-		log.Printf("[%s] WARNING: Market order %s partially filled. %d shares remaining (No Liquidity)", newOrder.Symbol, newOrder.ID, remainingQty)
-	}
-}
-
-// cancelOrder searches the book and removes the order
-func (e *Engine) cancelOrder(cancelReq models.Order, book *OrderBook) {
-	sideMap := book.Bids
-	if cancelReq.Side == models.Sell {
-		sideMap = book.Asks
-	}
-
-	queue := sideMap[cancelReq.Price]
-	for i, o := range queue {
-		if o.ID == cancelReq.ID {
-			// Remove the order from the slice (Go slice trick)
-			sideMap[cancelReq.Price] = append(queue[:i], queue[i+1:]...)
-			log.Printf("Cancelled Order: %s", cancelReq.ID)
-
-			// If the queue is now empty, delete the price level entirely
-			if len(sideMap[cancelReq.Price]) == 0 {
-				delete(sideMap, cancelReq.Price)
-			}
-			return
+	case models.Sell:
+		remaining := e.match(order, book.Bids)
+		if remaining > 0 {
+			log.Printf("[%s] Market SELL not fully filled (%d remaining — no liquidity)", order.Symbol, remaining)
 		}
 	}
 }
 
-// ---------------------------------------------------------
-// HELPER FUNCTIONS
-// ---------------------------------------------------------
+func (e *Engine) match(taker models.Order, side *OrderSide) int64 {
+	remaining := taker.Quantity
 
-// crossQueue executes trades against a specific price level queue
-// returns remaining quantity as integer
-
-func (e *Engine) crossQueue(takerOrder *models.Order, remainingQty int64, priceLevel float64, bookSide map[float64][]models.Order) int64 {
-
-	queue := bookSide[priceLevel]
-
-	// Iterate through the orders resting at this price (Time priority)
-	for i := 0; i < len(queue); i++ {
-		makerOrder := &queue[i]
-
-		if remainingQty == 0 {
+	for remaining > 0 {
+		bestPrice, ok := side.BestPrice()
+		if !ok {
 			break
 		}
 
-		// Calculate how many shares we can trade
-		tradeQty := min(remainingQty, makerOrder.Quantity)
-
-		// Create and send the trade message
-		trade := models.TradeMessage{
-			Symbol:       takerOrder.Symbol, //Track symbol for each trade!
-			MakerOrderID: makerOrder.ID,
-			TakerOrderID: takerOrder.ID,
-			Price:        priceLevel,
-			Quantity:     tradeQty,
-			Timestamp:    time.Now().UnixNano(),
+		if taker.Type == models.Limit {
+			if taker.Side == models.Buy && bestPrice > taker.Price {
+				break
+			}
+			if taker.Side == models.Sell && bestPrice < taker.Price {
+				break
+			}
 		}
-		e.TradeStream <- trade
-		log.Printf("[%s] TRADE: %d shares @ $%.2f",
-			takerOrder.Symbol, tradeQty, priceLevel)
 
-		// Reduce quantities
-		remainingQty -= tradeQty
-		makerOrder.Quantity -= tradeQty
-	}
+		queue := side.GetQueue(bestPrice)
 
-	// Clean up the queue: Remove fully filled orders from the front
-	var newQueue []models.Order
-	for _, o := range queue {
-		if o.Quantity > 0 {
-			newQueue = append(newQueue, o)
+		for node := queue.Front(); node != nil && remaining > 0; node = queue.Front() {
+			maker := &node.Order
+			tradeQty := min(remaining, maker.Quantity)
+
+			e.TradeStream <- models.TradeMessage{
+				Symbol:       taker.Symbol,
+				MakerOrderID: maker.ID,
+				TakerOrderID: taker.ID,
+				Price:        bestPrice,
+				Quantity:     tradeQty,
+				Timestamp:    time.Now().UnixNano(),
+			}
+
+			log.Printf("[%s] TRADE: %d shares @ ₹%.2f", taker.Symbol, tradeQty, bestPrice)
+
+			remaining -= tradeQty
+			maker.Quantity -= tradeQty
+
+			if maker.Quantity == 0 {
+				queue.PopFront()
+				delete(e.OrderIndex, maker.ID)
+			}
+		}
+
+		if queue.Empty() {
+			side.RemovePriceLevel(bestPrice)
 		}
 	}
 
-	// If the queue is empty, delete the price level, else update it
-	if len(newQueue) == 0 {
-		delete(bookSide, priceLevel)
-	} else {
-		bookSide[priceLevel] = newQueue
-	}
-
-	return remainingQty
+	return remaining
 }
 
-// getSortedPrices extracts keys from the map and sorts them
-func (e *Engine) getSortedPrices(m map[float64][]models.Order, ascending bool) []float64 {
-	keys := make([]float64, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+func (e *Engine) cancelOrder(order models.Order, book *OrderBook) {
+	node, exists := e.OrderIndex[order.ID]
+	if !exists {
+		return
 	}
 
-	sort.Slice(keys, func(i, j int) bool {
-		if ascending {
-			return keys[i] < keys[j] // Lowest first (for Asks)
-		}
-		return keys[i] > keys[j] // Highest first (for Bids)
-	})
+	side := book.Asks
+	if node.Order.Side == models.Buy {
+		side = book.Bids
+	}
 
-	return keys
+	price := node.Order.Price
+	queue := side.GetQueue(price)
+	if queue == nil {
+		delete(e.OrderIndex, order.ID)
+		return
+	}
+
+	queue.Remove(node)
+	delete(e.OrderIndex, order.ID)
+
+	if queue.Empty() {
+		side.RemovePriceLevel(price)
+	}
+
+	log.Printf("Cancelled Order: %s", order.ID)
 }
+
+// ---- LOB Snapshot ----
+
+// emitLOBSnapshot builds a public depth snapshot and sends it non-blocking
+// to LOBStream → storage.handleLOBSnapshot → Redis orderbook + midprice keys.
+// Uses OrderSide.AllPrices() for O(P) BST traversal and VolumeAt() per level.
+
+func (e *Engine) emitLOBSnapshot(symbol string, book *OrderBook) {
+	bidPrices := book.Bids.AllPrices(false) // descending: best bid first
+	askPrices := book.Asks.AllPrices(true)  // ascending:  best ask first
+
+	bids := make([]models.PriceLevel, 0, len(bidPrices))
+	asks := make([]models.PriceLevel, 0, len(askPrices))
+
+	for _, price := range bidPrices {
+		vol := book.Bids.VolumeAt(price)
+		if vol > 0 {
+			bids = append(bids, models.PriceLevel{
+				Price:    price,
+				Quantity: vol,
+			})
+		}
+	}
+
+	for _, price := range askPrices {
+		vol := book.Asks.VolumeAt(price)
+		if vol > 0 {
+			asks = append(asks, models.PriceLevel{
+				Price:    price,
+				Quantity: vol,
+			})
+		}
+	}
+
+	var midPrice float64
+	if len(bids) > 0 && len(asks) > 0 {
+		midPrice = (bids[0].Price + asks[0].Price) / 2.0
+	}
+
+	select {
+	case e.LOBStream <- models.LOBSnapshot{
+		Symbol:   symbol,
+		Bids:     bids,
+		Asks:     asks,
+		MidPrice: midPrice,
+	}:
+	default:
+		// consumer is slow — drop; next order will emit a fresh snapshot
+	}
+}
+
+// ---- Diagnostics ----
+
+func (e *Engine) logOrderBookState(symbol string, book *OrderBook) {
+	log.Printf("===== LOB STATE: %s =====", symbol)
+
+	// Asks: print highest first (reverse the ascending slice)
+	askPrices := book.Asks.AllPrices(true)
+	for i := len(askPrices) - 1; i >= 0; i-- {
+		price := askPrices[i]
+		log.Printf("  ASK: %d shares @ ₹%.2f", book.Asks.VolumeAt(price), price)
+	}
+
+	log.Printf("  -----------------------")
+
+	// Bids: already descending from AllPrices
+	for _, price := range book.Bids.AllPrices(false) {
+		log.Printf("  BID: %d shares @ ₹%.2f", book.Bids.VolumeAt(price), price)
+	}
+
+	log.Printf("=========================")
+}
+
+// ---- Helpers ----
 
 func min(a, b int64) int64 {
 	if a < b {
@@ -308,46 +278,8 @@ func min(a, b int64) int64 {
 	return b
 }
 
-// ---------------------------------------------------------
-// DIAGNOSTICS & LOGGING
-// ---------------------------------------------------------
-
-// logOrderBookState prints the current depth of the Bids and Asks
-func (e *Engine) logOrderBookState(symbol string, book *OrderBook) {
-	log.Printf("===== LOB STATE: %s =====", symbol)
-
-	// Print Asks (Highest price at the top)
-	askPrices := e.getSortedPrices(book.Asks, true)
-	for i := len(askPrices) - 1; i >= 0; i-- {
-		price := askPrices[i]
-		qty := e.getQueueVolume(book.Asks[price])
-		log.Printf("  ASK: %d shares @ $%.2f", qty, price)
-	}
-
-	log.Printf("  -----------------------")
-
-	// Print Bids (Highest price at the top)
-	bidPrices := e.getSortedPrices(book.Bids, false)
-	for _, price := range bidPrices {
-		qty := e.getQueueVolume(book.Bids[price])
-		log.Printf("  BID: %d shares @ $%.2f", qty, price)
-	}
-	log.Printf("=========================")
-}
-
-// getQueueVolume helper to sum up the quantities at a specific price level
-func (e *Engine) getQueueVolume(queue []models.Order) int64 {
-	var vol int64 = 0
-	for _, o := range queue {
-		vol += o.Quantity
-	}
-	return vol
-}
-
-// Current Time Complexity:
-// - Price Lookup (Map): O(1)
-// - Price Sorting (getSortedPrices): O(P log P) where P is active price levels.
-// - Queue Execution/Removal (Slice): O(N) where N is queue length.
-// Future Optimization Note: To make this significantly faster and avoid O(P log P) sorting,
-// we plan to transition to a TreeSet (BST). This will yield O(log P) insertion/deletion
-// and O(1) lookup for the best Bid/Ask prices!
+// ---- Time Complexities ----
+// Add order:     O(1) existing price level | O(log P) new price level (BST insert)
+// Cancel order:  O(1) via OrderIndex lookup
+// Match orders:  O(K + L log P) — K trades executed, L price levels traversed
+// LOB snapshot:  O(P) — one BST Slice() traversal + O(N) VolumeAt per level
