@@ -77,7 +77,7 @@ func (e *Engine) processOrder(order models.Order) {
 	}
 
 	// Print the updated Order Book state to the terminal
-	e.logOrderBookState(order.Symbol, book)
+	// e.logOrderBookState(order.Symbol, book)
 }
 
 // ---------------------------------------------------------
