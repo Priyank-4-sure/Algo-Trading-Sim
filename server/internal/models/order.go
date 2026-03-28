@@ -58,3 +58,17 @@ type TradeMessage struct {
 	Quantity     int64   `json:"quantity"`
 	Timestamp    int64   `json:"timestamp"`
 }
+
+// PriceLevel represents one row in the order book depth (snapshot)
+type PriceLevel struct {
+	Price    float64 `json:"price"`
+	Quantity int64   `json:"quantity"`
+}
+
+// LOBSnapshot is emitted by the engine after every order is processed
+type LOBSnapshot struct {
+	Symbol   string       `json:"symbol"`
+	Bids     []PriceLevel `json:"bids"` // sorted descending (best bid first)
+	Asks     []PriceLevel `json:"asks"` // sorted ascending  (best ask first)
+	MidPrice float64      `json:"mid_price"`
+}
