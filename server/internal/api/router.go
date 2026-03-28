@@ -18,6 +18,28 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 	r.Route("/v1", func(r chi.Router) {
 		// all routes will be defined here, e.g.:
 		r.Get("/ws", h.HandleWebSocket) // WebSocket endpoint
+
+		r.Group(func(r chi.Router) {
+			r.Post("/orders", h.PlaceOrder)         
+			r.Delete("/orders/{id}", h.CancelOrder) 
+			r.Get("/orders/{id}", h.GetOrderStatus)
+			r.Get("/orders/active", h.GetActiveOrders)
+			r.Get("/orders/history", h.GetOrderHistory)
+			r.Get("/trades/history", h.GetTradeHistory)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Get("/assets", h.GetAssets)
+			r.Get("/marketdata/{symbol}", h.GetMarketData)
+			r.Get("/candles/{symbol}/{interval}", h.GetMarketCandles)
+			r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Get("/portfolio", h.GetPortfolio)
+			r.Get("/portfolio/history", h.GetPortfolioHistory)
+			r.Post("/portfolio/reset", h.ResetPortfolio)
+		})
 	})
 
 	return r
