@@ -15,9 +15,31 @@ interface SignUpPageProps {
 export function SignUpPage({ onSignUp, darkMode, toggleDarkMode }: SignUpPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate(); // 2. Initialize navigate
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const password = formData.get('password') as string;
+    const confirmPassword = (formData.get('confirmPassword') as string || '').trim();
+
+    // 1. Check if both fields are identical
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    // 1. Password Regex Constraint
+    // ^(?=.*[a-z])  -> Must contain at least one lowercase letter
+    // (?=.*\d)      -> Must contain at least one digit
+    // .{8,}         -> Must be at least 8 characters long
+    const passwordRegex = /^(?=.*[a-z])(?=.*\d).{8,}$/;
+
+    if (!passwordRegex.test(password)) {
+      setError("Password must be at least 8 characters, include a lowercase letter and a number.");
+      return; // Stop the login/signup process
+    }
+
     // 3. Update the Auth State in App.tsx
     onSignUp();
     // 4. Redirect to the dashboard
@@ -120,6 +142,7 @@ export function SignUpPage({ onSignUp, darkMode, toggleDarkMode }: SignUpPagePro
                   <div className="relative group">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                     <input 
+                      name="password"
                       type={showPassword ? "text" : "password"} 
                       placeholder="••••••••" 
                       required
@@ -137,6 +160,7 @@ export function SignUpPage({ onSignUp, darkMode, toggleDarkMode }: SignUpPagePro
                   <div className="relative group">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                     <input 
+                      name="confirmPassword"
                       type={showPassword ? "text" : "password"} 
                       placeholder="••••••••" 
                       required
@@ -170,20 +194,26 @@ export function SignUpPage({ onSignUp, darkMode, toggleDarkMode }: SignUpPagePro
                 </p>
               </div>
               {/* ... Name, Email, Passwords ... */}
-
+              {error && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-1">
+                  {error}
+                </div>
+              )}
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-blue-600/25 mt-2 flex items-center justify-center gap-2 group transition-all active:scale-[0.97]">
-                Open Portfolio <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                Create Account <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </form>
 
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-white/5 text-center">
               {/* 6. Use navigate for the footer link */}
+              <div className='flex justify-center gap-1'>
+              <p className="text-[10px] font-black uppercase tracking-[0.15em] transition-colors">Existing User?</p>
               <button 
                 onClick={() => navigate('/login')} 
                 className="text-[10px] text-blue-600 hover:text-blue-500 font-black uppercase tracking-[0.15em] transition-colors"
               >
-                Existing Operator? Sign In
-              </button>
+                Sign In
+              </button></div>
             </div>
           </div>
         </div>
