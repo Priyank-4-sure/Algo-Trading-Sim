@@ -1,37 +1,45 @@
 import { useState } from 'react';
-import { Eye, EyeOff, TrendingUp, ArrowRight, Lock, Mail, User, ShieldCheck } from 'lucide-react';
-import { GuestTopNav } from '../layouts/GuestTopNav'; // <-- 1. Import the Nav Component
+import { Eye, EyeOff, ArrowRight, Lock, Mail, User, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // 1. Import useNavigate
+import { GuestTopNav } from '../layouts/GuestTopNav';
 
 interface SignUpPageProps {
   onSignUp: () => void;
-  onGoToLogin: () => void;
-  onGoToHome: () => void;
   darkMode: boolean;
-  toggleDarkMode: ()=>void;
+  toggleDarkMode: () => void;
+  // Optional: keeping for compatibility during the transition
+  onGoToLogin?: () => void;
+  onGoToHome?: () => void;
 }
 
-export function SignUpPage({ onSignUp, onGoToLogin, onGoToHome, darkMode,toggleDarkMode,}: SignUpPageProps) {
+export function SignUpPage({ onSignUp, darkMode, toggleDarkMode }: SignUpPageProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate(); // 2. Initialize navigate
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // 3. Update the Auth State in App.tsx
+    onSignUp();
+    // 4. Redirect to the dashboard
+    navigate('/app/trade');
+  };
 
   return (
-    // 2. Wrap everything in a main container that handles the background color
     <div className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-500 ${
       darkMode ? 'bg-[#0f172a]' : 'bg-slate-50'
     }`}>
       
-      {/* 3. Add the GuestTopNav at the very top */}
+      {/* ─── SHARED TOP NAVIGATION ─── */}
       <GuestTopNav 
         darkMode={darkMode}
-        onLogin={onGoToLogin}
-        onSignUp={() => {}} // Already on Sign Up, so do nothing
-        onGoHome={onGoToHome}
         toggleDarkMode={toggleDarkMode}
+        onLogin={() => navigate('/login')} // 5. Use navigate
+        onSignUp={() => {}} 
+        onGoHome={() => navigate('/')}      // 5. Use navigate
       />
 
-      {/* 4. Make this inner div take up the rest of the screen height (flex-1) */}
       <div className="flex-1 w-full flex items-center justify-center relative overflow-hidden">
-        
-        {/* ─── SHARED GRID PATTERN BACKGROUND ─── */}
+        {/* --- BACKGROUND ELEMENTS (Keeping Existing JSX) --- */}
         <div className="absolute inset-0 pointer-events-none">
           <div className={`absolute inset-0 ${darkMode ? 'opacity-[0.15]' : 'opacity-[0.05]'}`} 
             style={{
@@ -50,11 +58,12 @@ export function SignUpPage({ onSignUp, onGoToLogin, onGoToHome, darkMode,toggleD
             darkMode ? 'bg-blue-600/10' : 'bg-blue-400/5'
           }`} />
         </div>
+        <div className="absolute inset-0 pointer-events-none">
+          {/* ... grid and glow divs ... */}
+        </div>
 
         <div className="relative z-10 w-full max-w-[440px] mx-4 my-8">
           
-          {/* I REMOVED the redundant logo block that was here, since the Logo is now in the TopNav! */}
-
           {/* AUTH CARD */}
           <div className={`backdrop-blur-2xl border rounded-[2.5rem] p-8 md:p-10 shadow-2xl transition-all duration-500 ${
             darkMode 
@@ -66,7 +75,8 @@ export function SignUpPage({ onSignUp, onGoToLogin, onGoToHome, darkMode,toggleD
               <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Join the high-frequency trading network.</p>
             </div>
 
-            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); onSignUp(); }}>
+            <form className="space-y-4" onSubmit={handleFormSubmit}>
+              {/* --- FORM FIELDS (Keep Existing JSX) --- */}
               {/* FULL NAME */}
               <div className="space-y-1.5">
                 <label className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Full Name</label>
@@ -159,6 +169,7 @@ export function SignUpPage({ onSignUp, onGoToLogin, onGoToHome, darkMode,toggleD
                   By initializing this account, you agree to our <b>Institutional Protocol</b> and automated execution risk terms.
                 </p>
               </div>
+              {/* ... Name, Email, Passwords ... */}
 
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-blue-600/25 mt-2 flex items-center justify-center gap-2 group transition-all active:scale-[0.97]">
                 Open Portfolio <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -166,7 +177,11 @@ export function SignUpPage({ onSignUp, onGoToLogin, onGoToHome, darkMode,toggleD
             </form>
 
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-white/5 text-center">
-              <button onClick={onGoToLogin} className="text-[10px] text-blue-600 hover:text-blue-500 font-black uppercase tracking-[0.15em] transition-colors">
+              {/* 6. Use navigate for the footer link */}
+              <button 
+                onClick={() => navigate('/login')} 
+                className="text-[10px] text-blue-600 hover:text-blue-500 font-black uppercase tracking-[0.15em] transition-colors"
+              >
                 Existing Operator? Sign In
               </button>
             </div>

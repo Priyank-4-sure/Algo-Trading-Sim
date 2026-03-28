@@ -1,47 +1,46 @@
 import { ReactNode } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom'; // Added Outlet and useNavigate
 import { TopNav } from './TopNav';
 import { SideNav } from './SideNav';
-import type { PageId } from '../../App';
 
 interface LayoutProps {
-  children: ReactNode;
+  children?: ReactNode;
   darkMode: boolean;
   toggleDarkMode: () => void;
-  activePage: PageId;
-  setActivePage: (page: PageId) => void;
-  onLogout: () => void; // <-- Added new prop
+  onLogout: () => void;
 }
 
 export function Layout({ 
-  children, 
   darkMode, 
   toggleDarkMode, 
-  activePage, 
-  setActivePage,
-  onLogout // <-- Destructured here
+  onLogout 
 }: LayoutProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen flex transition-colors duration-300 bg-main text-main font-sans">
       
-      {/* Passed to SideNav (Common place for a logout button at the bottom) */}
+      {/* SideNav now handles navigation via URLs internally or via navigate() */}
       <SideNav 
-        activePage={activePage} 
-        setActivePage={setActivePage} 
         onLogout={onLogout} 
       />
       
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         
-        {/* Also passed to TopNav (Common place for a user profile dropdown) */}
         <TopNav 
           darkMode={darkMode} 
           toggleDarkMode={toggleDarkMode} 
           onLogout={onLogout} 
-          onProfileClick={() => setActivePage('portfolio')}
+          // Instead of setActivePage, we use navigate to change the URL
+          onProfileClick={() => navigate('/app/portfolio')}
         />
         
         <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full max-w-[1600px] mx-auto">
-          {children}
+          {/* CRITICAL CHANGE: 
+             <Outlet /> renders the component matched by the child route 
+             (e.g., TradePage, MarketsPage, etc.) 
+          */}
+          <Outlet />
         </main>
       </div>
     </div>

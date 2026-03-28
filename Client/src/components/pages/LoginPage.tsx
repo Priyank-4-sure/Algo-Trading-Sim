@@ -1,17 +1,29 @@
+
 import { useState } from 'react';
 import { Eye, EyeOff, ArrowRight, Lock, Mail, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // 1. Import useNavigate
 import { GuestTopNav } from '../layouts/GuestTopNav';
 
 interface LoginPageProps {
   onLogin: () => void;
-  onGoToSignUp: () => void;
-  onGoToHome: () => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  // Optional: keeping these for compatibility, but we'll use navigate() instead
+  onGoToSignUp?: () => void;
+  onGoToHome?: () => void;
 }
 
-export function LoginPage({ onLogin, onGoToSignUp, onGoToHome, darkMode, toggleDarkMode }: LoginPageProps) {
+export function LoginPage({ onLogin, darkMode, toggleDarkMode }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate(); // 2. Initialize navigate
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // 3. Update Auth State via prop
+    onLogin(); 
+    // 4. Redirect to the actual app route
+    navigate('/app/trade');
+  };
 
   return (
     <div className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-500 ${
@@ -22,15 +34,13 @@ export function LoginPage({ onLogin, onGoToSignUp, onGoToHome, darkMode, toggleD
       <GuestTopNav 
         darkMode={darkMode}
         toggleDarkMode={toggleDarkMode}
-        onLogin={() => {}} // Already on Log In, so do nothing
-        onSignUp={onGoToSignUp}
-        onGoHome={onGoToHome}
+        onLogin={() => {}} 
+        onSignUp={() => navigate('/signup')} // 5. Use navigate
+        onGoHome={() => navigate('/')}       // 5. Use navigate
       />
 
-      {/* ─── MAIN CONTENT AREA ─── */}
       <div className="flex-1 w-full flex items-center justify-center relative overflow-hidden">
-        
-        {/* SHARED GRID PATTERN BACKGROUND */}
+        {/* ... (Background Grid and Glow - Keeping Existing JSX) ... */}
         <div className="absolute inset-0 pointer-events-none">
           <div className={`absolute inset-0 ${darkMode ? 'opacity-[0.15]' : 'opacity-[0.05]'}`} 
             style={{
@@ -49,10 +59,9 @@ export function LoginPage({ onLogin, onGoToSignUp, onGoToHome, darkMode, toggleD
             darkMode ? 'bg-blue-600/10' : 'bg-blue-400/5'
           }`} />
         </div>
-
+        
         <div className="relative z-10 w-full max-w-[400px] mx-4 my-8">
           
-          {/* AUTH CARD */}
           <div className={`backdrop-blur-2xl border rounded-[2.5rem] p-8 md:p-10 shadow-2xl transition-all duration-500 ${
             darkMode 
               ? 'bg-slate-900/60 border-white/10 shadow-black/40' 
@@ -63,7 +72,8 @@ export function LoginPage({ onLogin, onGoToSignUp, onGoToHome, darkMode, toggleD
               <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Authenticate to access the terminal.</p>
             </div>
 
-            <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); onLogin(); }}>
+            <form className="space-y-5" onSubmit={handleFormSubmit}>
+              {/* --- EMAIL & PASSWORD INPUTS (Keep Existing JSX) --- */}
               
               {/* EMAIL */}
               <div className="space-y-1.5">
@@ -125,6 +135,7 @@ export function LoginPage({ onLogin, onGoToSignUp, onGoToHome, darkMode, toggleD
                   Ensure you are on the official <b>nextbull.in</b> domain before entering your credentials.
                 </p>
               </div>
+              {/* ... */}
 
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-blue-600/25 mt-4 flex items-center justify-center gap-2 group transition-all active:scale-[0.97]">
                 Access Terminal <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -132,7 +143,11 @@ export function LoginPage({ onLogin, onGoToSignUp, onGoToHome, darkMode, toggleD
             </form>
 
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-white/5 text-center">
-              <button onClick={onGoToSignUp} className="text-[10px] text-blue-600 hover:text-blue-500 font-black uppercase tracking-[0.15em] transition-colors">
+              {/* 6. Use navigate for the footer link */}
+              <button 
+                onClick={() => navigate('/signup')} 
+                className="text-[10px] text-blue-600 hover:text-blue-500 font-black uppercase tracking-[0.15em] transition-colors"
+              >
                 New Operator? Request Access
               </button>
             </div>

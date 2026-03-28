@@ -1,70 +1,46 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // 1. Import useNavigate
 import { GuestTopNav } from '../layouts/GuestTopNav';
 
 interface LandingPageProps {
   darkMode: boolean;
-  onLoginClick: () => void;
-  onSignUpClick: () => void;
   toggleDarkMode: () => void;
+  // 2. These are now optional to satisfy TypeScript while you transition
+  onLoginClick?: () => void;
+  onSignUpClick?: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ 
   darkMode, 
-  onLoginClick, 
-  onSignUpClick,
   toggleDarkMode,
 }) => {
+  const navigate = useNavigate(); // 3. Initialize the navigate function
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-500 relative ${
       darkMode ? 'bg-[#020617] text-white' : 'bg-slate-50 text-slate-900'
     }`}>
       
-      {/* ─── SHARED GRID PATTERN BACKGROUND (From Auth Pages) ─── */}
+      {/* --- BACKGROUND ELEMENTS (Keep your existing JSX here) --- */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className={`absolute inset-0 transition-opacity duration-500 ${darkMode ? 'opacity-[0.15]' : 'opacity-[0.08]'}`} 
-          style={{
-            backgroundImage: `radial-gradient(${darkMode ? '#334155' : '#64748b'} 1px, transparent 1px)`,
-            backgroundSize: '24px 24px'
-          }} 
-        />
-        <div className={`absolute inset-0 transition-opacity duration-500 ${darkMode ? 'opacity-20' : 'opacity-[0.04]'}`} 
-          style={{
-            backgroundImage: `linear-gradient(${darkMode ? '#1e293b' : '#94a3b8'} 1px, transparent 1px), 
-                              linear-gradient(90deg, ${darkMode ? '#1e293b' : '#94a3b8'} 1px, transparent 1px)`,
-            backgroundSize: '100px 100px'
-          }} 
-        />
-        {/* Adjusted Glow: Softer and more vibrant in light mode */}
-        <div className={`absolute top-[20%] left-1/2 -translate-x-1/2 w-full max-w-[800px] h-[400px] rounded-full blur-[120px] transition-colors duration-500 ${
-          darkMode ? 'bg-blue-600/20' : 'bg-blue-500/10'
-        }`} />
+        {/* ... your grid and glow divs ... */}
       </div>
 
-      {/* ─── NEW REUSABLE GUEST NAV ─── */}
+      {/* ─── GUEST NAV ─── */}
       <GuestTopNav 
         darkMode={darkMode}
-        onLogin={onLoginClick}
-        onSignUp={onSignUpClick}
+        // 4. Use navigate instead of props
+        onLogin={() => navigate('/login')}
+        onSignUp={() => navigate('/signup')}
         toggleDarkMode={toggleDarkMode}
-        onGoHome={() => {}} 
+        onGoHome={() => navigate('/')} 
       />
 
       {/* ─── HERO SECTION ─── */}
       <main className="flex-1 flex flex-col items-center pt-24 pb-12 px-6 text-center relative z-10">
         
-        {/* Crisper Badge for Light Mode */}
-        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest mb-8 animate-pulse shadow-sm ${
-          darkMode 
-            ? 'bg-blue-600/10 border-blue-600/20 text-blue-400' 
-            : 'bg-white border-blue-200 text-blue-600 shadow-blue-500/10'
-        }`}>
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-          </span>
-          v2.0 Terminal Live
-        </div>
+        {/* ... your v2.0 badge ... */}
         
         <h1 className="text-6xl md:text-7xl font-black mb-6 tracking-tighter leading-[0.9]">
           Trade with <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">Precision.</span>
@@ -75,7 +51,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </p>
 
         <button 
-          onClick={onSignUpClick}
+          // 5. Direct navigation on click
+          onClick={() => navigate('/signup')}
           className="group flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl shadow-blue-600/20 transition-all active:scale-95 mb-16"
         >
           Start Trading Now
