@@ -146,30 +146,42 @@ func InitSchema(tsdb *gorm.DB) error {
 }
 
 // ---- InsertOrder ----
-// Called from the HTTP handler BEFORE pushing to orderStream.
-// Skips CANCEL orders — they reference existing positions and must never
-// create a new OPEN record in the database.
-
 func (s *Store) InsertOrder(order models.Order) {
 	if order.Type == models.Cancel {
 		return
 	}
 
-	record := OrderRecord{
-		ID:        order.ID,
-		UserID:    "anonymous", // replace with real userID after auth is added
-		Symbol:    order.Symbol,
-		Type:      string(order.Type),
-		Side:      string(order.Side),
-		Price:     order.Price,
-		Quantity:  order.Quantity,
-		FilledQty: 0,
-		Status:    "OPEN",
-		CreatedAt: time.Now(),
-	}
-	if err := s.tsdb.Create(&record).Error; err != nil {
-		log.Printf("[Storage] InsertOrder failed for %s: %v", order.ID, err)
-	}
+	go func(order models.Order) {
+		key := "order:" + order.ID
+		data, err := json.Marshal(order)
+		if err != nil {
+			log.Printf("[Storage] InsertOrder marshal failed for %s: %v", order.ID, err)
+			return
+		}
+
+		// Primary record — full order JSON, expires in 24h
+		if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
+			log.Printf("[Storage] InsertOrder Redis set failed for %s: %v", order.ID, err)
+			return
+		}
+
+		score := float64(time.Now().UnixNano())
+
+		// Index by user ID — so we can fetch all orders for a user
+		s.redis.ZAdd(s.ctx, "orders:user:"+order.UserID, redis.Z{
+			Score:  score,
+			Member: order.ID,
+		})
+
+		// Index by symbol — open orders per symbol
+		s.redis.ZAdd(s.ctx, "orders:open:"+order.Symbol, redis.Z{
+			Score:  score,
+			Member: order.ID,
+		})
+
+		log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%s symbol=%s)",
+			order.ID, order.UserID, order.Symbol)
+	}(order)
 }
 
 // ---- StartPipeline ----
@@ -404,14 +416,47 @@ func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, 
 	return candles, err
 }
 
-// GetOrders returns order history from TimescaleDB
-func (s *Store) GetOrders(userID string) ([]OrderRecord, error) {
-	var orders []OrderRecord
-	err := s.tsdb.
-		Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Find(&orders).Error
-	return orders, err
+// GetOrderByID returns a single order by its ID — O(1) direct lookup
+func (s *Store) GetOrderByID(orderID string) (*models.Order, error) {
+	raw, err := s.redis.Get(s.ctx, "order:"+orderID).Result()
+	if err != nil {
+		return nil, fmt.Errorf("order %s not found", orderID)
+	}
+	var order models.Order
+	if err := json.Unmarshal([]byte(raw), &order); err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+// GetOrdersByUser returns all orders for a user, newest first
+func (s *Store) GetOrdersByUser(userID string) ([]models.Order, error) {
+	ids, err := s.redis.ZRevRange(s.ctx, "orders:user:"+userID, 0, -1).Result()
+	if err != nil || len(ids) == 0 {
+		return []models.Order{}, nil
+	}
+
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = "order:" + id
+	}
+
+	raws, err := s.redis.MGet(s.ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("GetOrdersByUser MGet failed: %w", err)
+	}
+
+	orders := make([]models.Order, 0, len(raws))
+	for _, raw := range raws {
+		if raw == nil {
+			continue // TTL expired — index entry outlived the data
+		}
+		var o models.Order
+		if err := json.Unmarshal([]byte(raw.(string)), &o); err == nil {
+			orders = append(orders, o)
+		}
+	}
+	return orders, nil
 }
 
 // GetCurrentCandle returns the live in-progress candle from Redis
