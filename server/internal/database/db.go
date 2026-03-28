@@ -6,8 +6,8 @@ import (
 	"log"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
-	"github.com/glebarez/sqlite"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+	"github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
