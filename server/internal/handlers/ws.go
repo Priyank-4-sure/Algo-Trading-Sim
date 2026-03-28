@@ -6,14 +6,39 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"strings"
 
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 )
 
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// 1. Try to Authenticate
+	var userID uint
+	tokenString := r.URL.Query().Get("token")
+	if tokenString == "" {
+		// Try header
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString = authHeader[7:]
+		}
+	}
+
+	if tokenString != "" {
+		cfg, _ := config.LoadConfig()
+		claims, err := utils.ValidateToken(tokenString, cfg.Server.JWTSecret)
+		if err == nil {
+			userID = claims.UserID
+			slog.Info("Authenticated WS connection", "userID", userID)
+		} else {
+			slog.Warn("Wont authenticate WS connection: invalid token", "error", err)
+		}
+	}
+
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 	})

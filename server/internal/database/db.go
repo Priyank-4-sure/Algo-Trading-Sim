@@ -7,6 +7,7 @@ import (
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
 	"github.com/glebarez/sqlite"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -28,6 +29,12 @@ func Init(cfg *config.AppConfig) (*Connections, error) {
 		return nil, fmt.Errorf("failed to connect to primary DB: %w", err)
 	}
 	log.Println("✅ Primary Database connected!")
+
+	// 1.1 Run Migrations
+	if err := primaryDB.AutoMigrate(&models.User{}); err != nil {
+		return nil, fmt.Errorf("failed to migrate primary DB: %w", err)
+	}
+	log.Println("✅ Primary Database migrated!")
 
 	// 2. Connect to Candlestick DB (TimescaleDB)
 	candlestickDB, err := connectSQL(cfg.CandlestickDB)
