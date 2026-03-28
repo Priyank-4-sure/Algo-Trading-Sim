@@ -193,26 +193,68 @@ func main() {
 
 	// 4. Start the GBM Market Manager (Physics Engine)
 	marketManager := gbm.NewMarketManager()
-	symbol := "TECH"
-	marketManager.AddAsset(symbol, "BLUE_CHIP", 100.00)
+	
+	// Read the JSON configuration
+	assetFile, err := os.ReadFile("config/assets.json") // Adjust path if needed
+	if err != nil {
+		log.Fatal("❌ Failed to read assets.json: ", err)
+	}
+
+	// Define a struct to unmarshal the JSON into
+	var configuredAssets []struct {
+		Symbol     string  `json:"symbol"`
+		Class      string  `json:"class"`
+		StartPrice float64 `json:"start_price"`
+	}
+	
+	if err := json.Unmarshal(assetFile, &configuredAssets); err != nil {
+		log.Fatal("❌ Failed to parse assets.json: ", err)
+	}
+
+	// Keep track of all active symbols to pass to our traders
+	var activeSymbols []string
+
+	// Loop through each asset, add to memory, and push to Redis
+	ctxBackground := context.Background()
+	for _, a := range configuredAssets {
+		// A. Add to the Simulation Engine (RAM)
+		marketManager.AddAsset(a.Symbol, a.Class, a.StartPrice)
+		activeSymbols = append(activeSymbols, a.Symbol)
+
+		// B. Save to Redis for the API Handlers
+		assetMetadata := map[string]interface{}{
+			"ticker":      a.Symbol,
+			"class":       a.Class,
+			"start_price": a.StartPrice,
+			"status":      "active",
+		}
+		metaJSON, _ := json.Marshal(assetMetadata)
+		
+		// Use HSet to store it in the "market:assets" Hash under the asset's symbol
+		dbConnections.Redis.HSet(ctxBackground, "market:assets", a.Symbol, metaJSON)
+		log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
+	}
 
 	time.Sleep(50 * time.Millisecond) // let engine bootstrap
 
-	// 9. Synthetic Market Maker (liquidity provider)
+	// 5. Start the Synthetic Market Maker (Liquidity Provider)
+	// We now pass the entire slice of activeSymbols!
 	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
-	go marketMaker.Start([]string{symbol}, 100*time.Millisecond)
+	go marketMaker.Start(activeSymbols, 100*time.Millisecond)
 
 	// 10. Noise Trader (retail/whale flow)
 	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
-	go noiseTrader.Start([]string{symbol}, 8*time.Hour)
+	go noiseTrader.Start(activeSymbols, 8*time.Hour)
 
 	// 11. GBM fair value diagnostics
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(2 * time.Second) // Slowed to 2s to avoid terminal spam
 		defer ticker.Stop()
 		for range ticker.C {
-			price := marketManager.GetPrice(symbol)
-			log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", symbol, price)
+			for _, sym := range activeSymbols {
+				price := marketManager.GetPrice(sym)
+				log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
+			}
 		}
 	}()
 
@@ -245,8 +287,10 @@ func main() {
 	<-done
 	log.Println("\n--- INITIATING SHUTDOWN ---")
 
-	// Stop simulation
-	marketManager.RemoveAsset(symbol)
+	// Shut down simulation components
+	for _, sym := range activeSymbols {
+		marketManager.RemoveAsset(sym)
+	}
 	time.Sleep(200 * time.Millisecond)
 	log.Println("Exchange offline.")
 

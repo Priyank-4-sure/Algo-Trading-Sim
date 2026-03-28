@@ -32,7 +32,7 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 			r.Get("/assets", h.GetAssets)
 			r.Get("/marketdata/{symbol}", h.GetMarketData)
 			r.Get("/candles/{symbol}/{interval}", h.GetMarketCandles)
-			r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
+			// r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
 		})
 
 		// Protected Routes
