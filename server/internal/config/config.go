@@ -23,6 +23,8 @@ type ServerConfig struct {
 	Environment             string        `mapstructure:"environment"`
 	LogLevel                string        `mapstructure:"log_level"`
 	GracefulShutdownTimeout time.Duration `mapstructure:"graceful_shutdown_timeout"`
+	JWTSecret               string        `mapstructure:"jwt_secret"`
+	JWTRefreshSecret        string        `mapstructure:"jwt_refresh_secret"`
 }
 
 // DatabaseConfig is reused for both Postgres (Primary) and TimescaleDB (Candlesticks)
