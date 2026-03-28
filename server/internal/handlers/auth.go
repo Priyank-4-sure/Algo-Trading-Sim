@@ -37,6 +37,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := models.User{
+		FullName: req.FullName,
 		Email:    req.Email,
 		Password: string(hashedPassword),
 	}
