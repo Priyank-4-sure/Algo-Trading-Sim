@@ -47,118 +47,122 @@ export function MarketsPage() {
   ];
 
   return (
-    <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none p-0 font-sans focus:outline-none focus:ring-0">
-      {/* Upper Panel: Four Cards with spaces */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0 p-4 pb-2">
+    <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none font-sans">
+      {/* Upper Panel: Four Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-0 shrink-0 pb-1">
         {topCharts.map((asset, idx) => (
-          <div key={idx} className="flex-1 glass-panel rounded-xl p-4 shadow-lg border border-main">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: asset.color }}>
-                  {asset.symbol.slice(0, 2)}
+          <div key={idx} className={`${idx === 0 ? '' : 'pl-1'}`}>
+            <div className="glass-panel rounded-lg p-3 h-full">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ backgroundColor: asset.color }}>
+                    {asset.symbol.slice(0, 2)}
+                  </div>
+                  <div>
+                    <div className="font-bold text-main text-sm">{asset.symbol}/USD</div>
+                    <div className="text-[10px] text-muted">{asset.title}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-bold text-main text-sm">{asset.symbol}/USD</div>
-                  <div className="text-[10px] text-muted">{asset.title}</div>
+                <div className={`flex items-center gap-1 text-sm font-bold ${asset.change24h >= 0 ? 'text-up' : 'text-down'}`}>
+                  {asset.change24h >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                  {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%
                 </div>
               </div>
-              <div className={`flex items-center gap-1 text-sm font-bold ${asset.change24h >= 0 ? 'text-up' : 'text-down'}`}>
-                {asset.change24h >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold font-mono text-main">${asset.price.toLocaleString()}</span>
+                <MiniSparkline data={asset.sparkline} width={80} height={28} />
               </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xl font-bold font-mono text-main">${asset.price.toLocaleString()}</span>
-              <MiniSparkline data={asset.sparkline} width={120} height={40} />
             </div>
           </div>
         ))}
       </div>
 
-      {/* Lower Panel: Seamless Table Panel like TradePage */}
-      <div className="flex-1 glass-panel rounded-none flex flex-col overflow-hidden shadow-none border-none border-t border-main mt-2">
-        <div className="px-5 py-3 border-b border-main flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-panel">
-          <span className="font-semibold text-lg font-display">Markets Overview</span>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="flex items-center bg-panel/50 rounded-lg px-3 py-2 border border-main gap-2 flex-1 sm:flex-none focus-within:border-white transition-colors">
-              <Search size={14} className="text-muted" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="bg-transparent text-main text-xs outline-none w-full sm:w-24 placeholder:text-muted"
-              />
-            </div>
-            <div className="flex gap-2 bg-main p-1 rounded-lg border border-main">
-              {(['all', 'gainers', 'losers'] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`text-xs uppercase font-bold px-4 py-1.5 rounded-md transition-all ${
-                    filter === f ? 'bg-panel shadow text-main' : 'text-muted hover:text-main'
-                  }`}
-                >
-                  {f === 'all' ? <Filter size={12} /> : f}
-                </button>
-              ))}
+      {/* Lower Panel: Table */}
+      <div className="flex-1 pt-1">
+        <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full">
+          <div className="px-3 py-2 border-b border-main flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <span className="font-semibold text-sm">Markets Overview</span>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
+                <Search size={12} className="text-muted" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-main text-xs outline-none w-full sm:w-16 placeholder:text-muted"
+                />
+              </div>
+              <div className="flex gap-1">
+                {(['all', 'gainers', 'losers'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`text-xs uppercase font-bold px-2 py-1 rounded transition-all ${
+                      filter === f ? 'bg-panel border border-white/20 text-main' : 'text-muted hover:text-main hover:bg-panel'
+                    }`}
+                  >
+                    {f === 'all' ? <Filter size={10} /> : f}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex-1 overflow-auto no-scrollbar">
-          <table className="w-full text-left text-sm">
-            <thead className="sticky top-0 bg-panel z-10">
-              <tr className="text-muted border-b border-main/50 text-xs uppercase tracking-wider bg-panel/80 backdrop-blur-sm">
-                <th className="pb-3 pt-4 px-5 font-medium">#</th>
-                <th className="pb-3 pt-4 px-4 font-medium">Asset</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right">Price</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right">24h Change</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right hidden sm:table-cell">Volume</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right hidden md:table-cell">Market Cap</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right hidden lg:table-cell">7D Trend</th>
-                <th className="pb-3 pt-4 px-5 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-main/50">
-              {filteredData.map((asset, i) => (
-                <tr key={asset.symbol} className="group hover:bg-main/30 transition-colors">
-                  <td className="py-4 px-5 text-muted text-sm">{i + 1}</td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ backgroundColor: asset.color }}>
-                        {asset.symbol.slice(0, 2)}
-                      </div>
-                      <div>
-                        <span className="font-semibold text-main">{asset.symbol}</span>
-                        <span className="text-muted text-[10px] ml-1 hidden sm:inline">{asset.name}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 font-mono text-right text-main font-semibold text-base">
-                    ${asset.price.toLocaleString(undefined, { maximumFractionDigits: asset.price < 1 ? 4 : 2 })}
-                  </td>
-                  <td className={`py-4 px-4 font-mono text-right font-bold text-sm ${asset.change24h >= 0 ? 'text-up' : 'text-down'}`}>
-                    {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%
-                  </td>
-                  <td className="py-4 px-4 font-mono text-right text-muted hidden sm:table-cell text-sm">{asset.volume}</td>
-                  <td className="py-4 px-4 font-mono text-right text-muted hidden md:table-cell text-sm">{asset.marketCap}</td>
-                  <td className="py-4 px-4 text-right hidden lg:table-cell">
-                    <MiniSparkline data={asset.sparkline} />
-                  </td>
-                  <td className="py-4 px-5 text-right w-48">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <button className="text-xs bg-panel border border-main px-3 py-1.5 rounded-md hover:border-white transition-colors text-main font-bold">Chart</button>
-                      <button className="text-xs bg-up px-3 py-1.5 rounded-md hover:brightness-110 transition-colors text-white font-bold">Trade</button>
-                      <button className="text-muted hover:text-yellow-400 transition-colors p-1.5" title="Add to Watchlist">
-                        <Star size={16} />
-                      </button>
-                    </div>
-                  </td>
+          <div className="flex-1 overflow-auto no-scrollbar">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-panel z-10">
+                <tr className="text-muted border-b border-subtle text-[10px] uppercase tracking-wider">
+                  <th className="pb-2 pt-2 px-3 font-medium">#</th>
+                  <th className="pb-2 pt-2 px-2 font-medium">Asset</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right">Price</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right">24h</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right hidden sm:table-cell">Volume</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right hidden md:table-cell">MCap</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right hidden lg:table-cell">7D</th>
+                  <th className="pb-2 pt-2 px-3 font-medium text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-subtle">
+                {filteredData.map((asset, i) => (
+                  <tr key={asset.symbol} className="group hover:bg-main/30 transition-colors">
+                    <td className="py-2 px-3 text-muted text-sm">{i + 1}</td>
+                    <td className="py-2 px-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: asset.color }}>
+                          {asset.symbol.slice(0, 2)}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-main text-sm">{asset.symbol}</span>
+                          <span className="text-muted text-[10px] ml-1 hidden sm:inline">{asset.name}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2 px-2 font-mono text-right text-main font-semibold text-sm">
+                      ${asset.price.toLocaleString(undefined, { maximumFractionDigits: asset.price < 1 ? 4 : 2 })}
+                    </td>
+                    <td className={`py-2 px-2 font-mono text-right font-bold text-sm ${asset.change24h >= 0 ? 'text-up' : 'text-down'}`}>
+                      {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%
+                    </td>
+                    <td className="py-2 px-2 font-mono text-right text-muted hidden sm:table-cell text-sm">{asset.volume}</td>
+                    <td className="py-2 px-2 font-mono text-right text-muted hidden md:table-cell text-sm">{asset.marketCap}</td>
+                    <td className="py-2 px-2 text-right hidden lg:table-cell">
+                      <MiniSparkline data={asset.sparkline} />
+                    </td>
+                    <td className="py-2 px-3 text-right w-32">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button className="text-[10px] bg-panel border border-main px-2 py-0.5 rounded hover:border-white/50 transition-colors text-main font-bold">Chart</button>
+                        <button className="text-[10px] bg-up px-2 py-0.5 rounded hover:brightness-110 transition-colors text-white font-bold">Trade</button>
+                        <button className="text-muted hover:text-yellow-400 transition-colors p-0.5" title="Add to Watchlist">
+                          <Star size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

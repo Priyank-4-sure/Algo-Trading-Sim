@@ -46,6 +46,12 @@ export function TopNav({ darkMode, toggleDarkMode, onLogout, onProfileClick }: T
   return (
     <header className="h-12 border-b border-main bg-panel flex items-center justify-between px-4 shrink-0 shadow-sm z-50 transition-colors font-sans">
       <div className="flex items-center gap-4">
+        {/* NextBull Logo */}
+        <div className="flex items-center gap-1 pr-4 border-r border-main">
+          <span className="text-main font-black text-2xl tracking-tighter font-display">N</span>
+          <span className="text-main font-extrabold tracking-[0.2em] text-sm font-display hidden sm:inline">EXTBULL</span>
+        </div>
+
         {/* Premium Coin Picker */}
         <div className="relative" ref={pickerRef}>
           <button

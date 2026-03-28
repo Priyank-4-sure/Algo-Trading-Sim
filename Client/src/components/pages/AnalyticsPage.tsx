@@ -44,131 +44,145 @@ export function AnalyticsPage() {
   ];
 
   return (
-    <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none p-0 font-sans focus:outline-none focus:ring-0">
-      {/* Stat Cards Row with spacing */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0 p-4 pb-0">
+    <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none font-sans">
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 shrink-0 pb-[2px]">
         {stats.map((stat, i) => (
-          <div key={i} className="glass-panel rounded-xl p-3 flex flex-col border border-main shadow-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-muted uppercase tracking-wider font-medium">{stat.label}</span>
-              <div className="text-muted">{stat.icon}</div>
-            </div>
-            <div className="text-xl font-bold text-main font-mono">{stat.value}</div>
-            {stat.change && (
-              <div className={`text-[10px] mt-1 ${stat.isPositive ? 'text-up' : 'text-down'}`}>
-                {stat.change}
+          <div key={i} className={`${i === 0 ? '' : 'pl-[2px]'}`}>
+            <div className="glass-panel rounded-lg p-3 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-muted uppercase tracking-wider font-medium">{stat.label}</span>
+                <div className="text-muted">{stat.icon}</div>
               </div>
-            )}
+              <div className="text-xl font-bold text-main font-mono">{stat.value}</div>
+              {stat.change && (
+                <div className={`text-[10px] mt-1 ${stat.isPositive ? 'text-up' : 'text-down'}`}>
+                  {stat.change}
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Main Content: Flush panels like TradePage */}
-      <div className="flex flex-col lg:flex-row gap-0 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden no-scrollbar border-t border-main">
-        
+      {/* Main Content */}
+      <div className="flex flex-col lg:flex-row gap-0 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden no-scrollbar pt-[2px]">
+
         {/* Left Column: Charts Column */}
-        <div className="flex-1 flex flex-col gap-0 min-h-0 border-r border-main">
-          
+        <div className="flex-1 flex flex-col gap-0 min-h-0 min-w-0 pr-1">
+
           {/* Portfolio Performance Chart Panel */}
-          <div className="flex-[2] glass-panel rounded-none flex flex-col overflow-hidden shadow-none border-none border-b border-main">
-            <div className="px-5 py-3 border-b border-main font-semibold text-sm flex items-center justify-between font-display bg-panel">
-              <span>Portfolio Performance</span>
-              <div className="flex gap-2">
-                {['1W', '1M', '3M', 'ALL'].map(period => (
-                  <button 
-                    key={period} 
-                    onClick={() => setTimeframe(period)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${period === timeframe ? 'bg-panel border border-white/20 text-main shadow-sm' : 'text-muted hover:text-main'}`}>
-                    {period}
-                  </button>
-                ))}
+          <div className="flex-[2] pb-1 min-w-0">
+            <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full">
+              <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between flex-wrap gap-2">
+                <span className="shrink-0">Portfolio Performance</span>
+                <div className="flex gap-1 flex-wrap overflow-x-auto no-scrollbar">
+                  {['1W', '1M', '3M', 'ALL'].map(period => (
+                    <button
+                      key={period}
+                      onClick={() => setTimeframe(period)}
+                      className={`text-xs font-bold px-2 py-1 rounded transition-colors whitespace-nowrap ${
+                        period === timeframe
+                          ? 'bg-panel border border-white/20 text-main'
+                          : 'text-muted hover:text-main hover:bg-panel'
+                      }`}>
+                      {period}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="flex-1 p-5 flex items-center justify-center">
-              <div className="w-full h-full flex items-end gap-1.5">
-                {portfolioHistory.map((value, i) => {
-                  const max = Math.max(...portfolioHistory);
-                  const min = Math.min(...portfolioHistory);
-                  const height = ((value - min) / (max - min)) * 100;
-                  const isLast = i === portfolioHistory.length - 1;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group">
-                      <div className="text-[10px] text-main font-bold opacity-0 group-hover:opacity-100 transition-opacity mb-2 font-mono pb-1 border-b border-white/20">
-                        ${(value / 1000).toFixed(1)}k
+              <div className="flex-1 p-3 flex items-center overflow-x-auto min-w-0">
+                <div className="h-full flex items-end gap-[1px] min-w-full">
+                  {portfolioHistory.map((value, i) => {
+                    const max = Math.max(...portfolioHistory);
+                    const min = Math.min(...portfolioHistory);
+                    const height = ((value - min) / (max - min)) * 100;
+                    const isLast = i === portfolioHistory.length - 1;
+                    return (
+                      <div key={i} className="flex-1 min-w-[3px] max-w-[30px] flex flex-col items-center justify-end h-full group">
+                        <div className="text-[10px] text-main font-bold opacity-0 group-hover:opacity-100 transition-opacity mb-1 font-mono">
+                          ${(value / 1000).toFixed(1)}k
+                        </div>
+                        <div
+                          className="w-full rounded-t-sm transition-all bg-up hover:brightness-125"
+                          style={{ height: `${Math.max(height, 5)}%`, opacity: isLast ? 1 : 0.6 }}
+                        />
                       </div>
-                      <div
-                        className={`w-full rounded-t-sm transition-all ${isLast ? 'bg-up' : 'bg-panel border border-b-0 border-main hover:bg-up/50 hover:border-white/20'}`}
-                        style={{ height: `${Math.max(height, 5)}%` }}
-                      />
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Asset Allocation & Daily P&L Panel Row */}
-          <div className="flex-1 flex flex-col sm:flex-row gap-0 min-h-[220px]">
+          <div className="flex-1 flex flex-col sm:flex-row gap-0 min-h-[160px] min-w-0 pt-1">
             {/* Daily P&L Panel */}
-            <div className="flex-1 glass-panel rounded-none flex flex-col overflow-hidden shadow-none p-5 border-none border-r border-main border-t lg:border-t-0">
-              <div className="font-semibold text-sm font-display mb-4">Daily P&L (14D)</div>
-              <div className="flex-1 flex items-end justify-between gap-1.5 pt-4">
-                {dailyPnL.map((pnl, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
-                    {pnl >= 0 ? (
-                      <div className="w-full bg-up/80 rounded-t-sm hover:brightness-125 transition-all" style={{ height: `${(pnl / 1000) * 100}%` }} />
-                    ) : (
-                      <div className="w-full bg-down/80 rounded-b-sm hover:brightness-125 transition-all absolute top-full" style={{ height: `${Math.abs(pnl) / 1000 * 100}%` }} />
-                    )}
-                  </div>
-                ))}
+            <div className="flex-1 pr-0.5">
+              <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full p-3">
+                <div className="font-semibold text-sm mb-2">Daily P&L (14D)</div>
+                <div className="flex-1 flex items-end justify-between gap-1">
+                  {dailyPnL.map((pnl, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                      {pnl >= 0 ? (
+                        <div className="w-full bg-up opacity-80 rounded-t-sm hover:opacity-100 transition-all" style={{ height: `${(pnl / 1000) * 100}%` }} />
+                      ) : (
+                        <div className="w-full bg-down opacity-80 rounded-b-sm hover:opacity-100 transition-all absolute top-full" style={{ height: `${Math.abs(pnl) / 1000 * 100}%` }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* Asset Allocation Panel */}
-            <div className="flex-1 glass-panel rounded-none flex flex-col overflow-hidden shadow-none p-5 border-none border-t sm:border-t-0 border-main">
-              <div className="font-semibold text-sm font-display mb-4">Asset Allocation</div>
-              <div className="flex flex-col gap-3 flex-1 justify-center">
-                {allocation.map(a => (
-                  <div key={a.symbol} className="flex flex-col gap-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="font-bold text-main">{a.symbol}</span>
-                      <span className="font-mono text-muted">{a.percentage}%</span>
+            <div className="flex-1 pl-0.5">
+              <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full p-3">
+                <div className="font-semibold text-sm mb-2">Asset Allocation</div>
+                <div className="flex flex-col gap-2 flex-1 justify-center">
+                  {allocation.map(a => (
+                    <div key={a.symbol} className="flex flex-col gap-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-bold text-main">{a.symbol}</span>
+                        <span className="font-mono text-muted">{a.percentage}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-main opacity-30 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${a.percentage}%`, backgroundColor: a.color }} />
+                      </div>
                     </div>
-                    <div className="h-2 w-full bg-panel rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${a.percentage}%`, backgroundColor: a.color }} />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-          
+
         </div>
 
         {/* Right Column: Recent Trades Panel */}
-        <div className="w-full lg:w-[350px] glass-panel rounded-none flex flex-col overflow-hidden shadow-none border-none">
-          <div className="px-5 py-4 border-b border-main font-semibold text-sm font-display bg-panel">Recent Trades</div>
-          <div className="flex-1 overflow-auto no-scrollbar p-2">
-            {recentTrades.map((trade, i) => (
-              <div key={i} className="px-3 py-4 flex items-center justify-between border-b border-main/30 hover:bg-panel/50 transition-colors rounded-lg group">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform group-hover:scale-110 ${trade.side === 'Buy' ? 'bg-up/20' : 'bg-down/20'}`}>
-                    {trade.side === 'Buy' ? <ArrowUpRight size={14} className="text-up" /> : <ArrowDownRight size={14} className="text-down" />}
+        <div className="w-full lg:w-[280px] pl-1">
+          <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full">
+            <div className="px-3 py-2 border-b border-main font-semibold text-sm">Recent Trades</div>
+            <div className="flex-1 overflow-auto no-scrollbar p-2">
+              {recentTrades.map((trade, i) => (
+                <div key={i} className="px-2 py-2 flex items-center justify-between border-b border-subtle hover:bg-panel/50 transition-colors rounded group">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center transition-transform group-hover:scale-110" style={{ backgroundColor: trade.side === 'Buy' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)' }}>
+                      {trade.side === 'Buy' ? <ArrowUpRight size={12} className="text-up" /> : <ArrowDownRight size={12} className="text-down" />}
+                    </div>
+                    <div>
+                      <div className="font-bold text-main text-sm">{trade.symbol}</div>
+                      <div className="text-[10px] text-muted">{trade.date}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-bold text-main text-sm">{trade.symbol}</div>
-                    <div className="text-[10px] text-muted font-medium">{trade.date}</div>
+                  <div className="text-right">
+                    <div className={`font-mono font-bold text-sm ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
+                      {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-muted font-mono">${trade.price.toLocaleString()}</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className={`font-mono font-bold text-base ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                    {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
-                  </div>
-                  <div className="text-xs text-muted font-mono mt-0.5">${trade.price.toLocaleString()}</div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
