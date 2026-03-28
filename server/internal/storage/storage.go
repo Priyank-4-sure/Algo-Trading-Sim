@@ -146,10 +146,9 @@ func InitSchema(tsdb *gorm.DB) error {
 }
 
 // ---- InsertOrder ----
-// Called from HTTP handler BEFORE pushing to orderStream.
-// FIX 3: Skip CANCEL orders — they are not new positions and must not be
-// written as OPEN records. Inserting them would create phantom open orders
-// that can never be filled or closed.
+// Called from the HTTP handler BEFORE pushing to orderStream.
+// Skips CANCEL orders — they reference existing positions and must never
+// create a new OPEN record in the database.
 
 func (s *Store) InsertOrder(order models.Order) {
 	if order.Type == models.Cancel {
@@ -174,40 +173,40 @@ func (s *Store) InsertOrder(order models.Order) {
 }
 
 // ---- StartPipeline ----
-// Starts goroutines that consume tradeStream and lobStream.
-// No candle flush goroutine needed — TimescaleDB handles that automatically.
+// FIX 1 & 3: StartPipeline now only owns the LOB snapshot channel.
+//
+// Previously the signature was StartPipeline(tradeStream, lobStream), which
+// launched an internal goroutine consuming tradeStream. main.go's trade goroutine
+// ALSO reads from tradeStream — two goroutines competing on one channel.
+// Go delivers each message to exactly one receiver, so trades would be randomly
+// split between the two consumers, breaking both persistence and tickerTape.
+//
+// The correct design (matching main.go's comment "Single trade consumer — owns
+// tradeStream exclusively") is for main.go's goroutine to be the sole consumer
+// of tradeStream and call HandleTrade directly. StartPipeline only manages the
+// LOB snapshot pipeline.
 
-func (s *Store) StartPipeline(
-	tradeStream <-chan models.TradeMessage,
-	lobStream <-chan models.LOBSnapshot,
-) {
-	// Goroutine 1: Trade consumer
-	go func() {
-		for trade := range tradeStream {
-			s.handleTrade(trade)
-		}
-	}()
-
-	// Goroutine 2: LOB snapshot consumer
+func (s *Store) StartPipeline(lobStream <-chan models.LOBSnapshot) {
 	go func() {
 		for snap := range lobStream {
 			s.handleLOBSnapshot(snap)
 		}
 	}()
 
-	log.Println("[Storage] Pipeline started.")
+	log.Println("[Storage] LOB snapshot pipeline started.")
 }
 
-// ---- Trade Handler ----
+// ---- HandleTrade ----
+// FIX 2: Exported so main.go's trade goroutine can call it directly.
+//
+// Previously this was handleTrade (unexported), causing a compile error:
+// "store.HandleTrade undefined". main.go is the sole consumer of tradeStream
+// and calls HandleTrade for each matched trade.
 
-func (s *Store) handleTrade(trade models.TradeMessage) {
-	// FIX 1: Log the trade here — the single place where every trade passes
-	// through — rather than in a competing goroutine in main.go.
-	log.Printf("[TRADE STREAM] [%s] Match ID: %s & %s | Qty: %d | Price: ₹%.2f",
-		trade.Symbol, trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Price)
+func (s *Store) HandleTrade(trade models.TradeMessage) {
 
-	// 1. Persist raw trade to TimescaleDB hypertable
-	// TimescaleDB continuous aggregate will auto-compute candles from this
+	// 1. Persist raw trade to TimescaleDB hypertable.
+	// TimescaleDB continuous aggregate will auto-compute candles from this.
 	record := TradeRecord{
 		ID:           fmt.Sprintf("%s-%d", trade.TakerOrderID, trade.Timestamp),
 		Symbol:       trade.Symbol,
@@ -215,19 +214,17 @@ func (s *Store) handleTrade(trade models.TradeMessage) {
 		Quantity:     trade.Quantity,
 		MakerOrderID: trade.MakerOrderID,
 		TakerOrderID: trade.TakerOrderID,
-		ExecutedAt:   time.Now(),
+		ExecutedAt:   time.Unix(0, trade.Timestamp),
 	}
 	if err := s.tsdb.Create(&record).Error; err != nil {
 		log.Printf("[Storage] InsertTrade failed: %v", err)
 	}
 
-	// 2. Update order fill status in TimescaleDB
+	// 2. Update order fill status in TimescaleDB (atomic transaction)
 	s.updateOrderStatus(trade.MakerOrderID, trade.Quantity)
 	s.updateOrderStatus(trade.TakerOrderID, trade.Quantity)
 
 	// 3. Update Redis: current in-progress candle (sub-second hot path)
-	// Redis candle is for the WebSocket 100ms broadcast
-	// TimescaleDB candle is for historical queries
 	s.updateCurrentCandle(trade)
 
 	// 4. Update Redis: recent trades ring buffer (last 50)
@@ -237,10 +234,9 @@ func (s *Store) handleTrade(trade models.TradeMessage) {
 	s.redis.LTrim(s.ctx, key, 0, 49)
 }
 
-// FIX 4: updateOrderStatus wraps both SQL statements in a single transaction.
-// Previously, the two statements ran independently — a crash or DB error between
-// them would leave filled_qty updated but status stale (e.g. stuck on OPEN).
-// Errors are now checked and logged on both the transaction and each statement.
+// updateOrderStatus wraps both SQL statements in a single transaction.
+// Without this, a crash between the two statements would leave filled_qty
+// incremented but status stale (e.g. stuck on OPEN).
 
 func (s *Store) updateOrderStatus(orderID string, filledQty int64) {
 	err := s.tsdb.Transaction(func(tx *gorm.DB) error {
@@ -270,8 +266,8 @@ func (s *Store) updateOrderStatus(orderID string, filledQty int64) {
 }
 
 // ---- Redis: Current In-Progress Candle ----
-// This is the sub-second hot candle broadcast to WebSocket every 100ms.
-// It does NOT replace TimescaleDB candles — it is the "live" candle only.
+// Sub-second hot candle for WebSocket broadcast. Does NOT replace TimescaleDB
+// candles — it is the "live" candle for the current second only.
 
 type CurrentCandle struct {
 	Open       float64   `json:"open"`
@@ -281,11 +277,6 @@ type CurrentCandle struct {
 	Volume     int64     `json:"volume"`
 	BucketTime time.Time `json:"bucket_time"`
 }
-
-// FIX 2: Reset the candle when the current second boundary has passed.
-// Previously the candle accumulated data indefinitely — BucketTime was only
-// ever written on the very first trade for a symbol and never re-checked,
-// so the "live" candle was useless for any time-bucketed chart.
 
 func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 	key := "candle:current:" + trade.Symbol
@@ -310,10 +301,9 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 	var candle CurrentCandle
 	json.Unmarshal([]byte(raw), &candle)
 
-	// The second has rolled over — start a fresh candle.
-	// The previous second's candle is already persisted in TimescaleDB
-	// via the hypertable insert in handleTrade; no data is lost.
-	if now != candle.BucketTime {
+	// Second boundary crossed — reset to a fresh candle.
+	// The previous second's data is already in TimescaleDB via the hypertable insert.
+	if !now.Equal(candle.BucketTime) {
 		candle = CurrentCandle{
 			Open:       trade.Price,
 			High:       trade.Price,
@@ -342,13 +332,26 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 }
 
 // ---- LOB Snapshot Handler ----
+// FIX 4: Added redis.Publish alongside redis.Set so WebSocket clients
+// subscribed to "orderbook:<symbol>" via ws.go's streamOrderbook actually
+// receive messages.
+//
+// Previously only redis.Set was called — a key-value write that is invisible
+// to Pub/Sub subscribers. ws.go's streamOrderbook subscribes to the
+// "orderbook:<symbol>" Pub/Sub channel and was silently hanging forever
+// because nothing ever published to it.
 
 func (s *Store) handleLOBSnapshot(snap models.LOBSnapshot) {
-	// Write full order book to Redis
 	data, _ := json.Marshal(snap)
-	s.redis.Set(s.ctx, "orderbook:"+snap.Symbol, data, 0)
+	key := "orderbook:" + snap.Symbol
 
-	// Write mid price to Redis
+	// Write the current state for REST/GET polling
+	s.redis.Set(s.ctx, key, data, 0)
+
+	// Publish to Pub/Sub so WebSocket subscribers in ws.go receive the update
+	s.redis.Publish(s.ctx, key, data)
+
+	// Write mid-price as a cheap scalar for clients that only need a price feed
 	s.redis.Set(s.ctx, "midprice:"+snap.Symbol,
 		fmt.Sprintf("%.4f", snap.MidPrice), 0)
 }
@@ -381,7 +384,7 @@ func (s *Store) GetRecentTrades(symbol string, n int64) ([]models.TradeMessage, 
 	return trades, nil
 }
 
-// GetCandles queries TimescaleDB continuous aggregate view
+// GetCandles queries TimescaleDB continuous aggregate view.
 // interval: "1s" or "5s"
 func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, error) {
 	view := "candles_1s"
