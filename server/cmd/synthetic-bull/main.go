@@ -195,7 +195,7 @@ func main() {
 	marketManager := gbm.NewMarketManager()
 	
 	// Read the JSON configuration
-	assetFile, err := os.ReadFile("config/assets.json") // Adjust path if needed
+	assetFile, err := os.ReadFile("internal/config/assets.json")
 	if err != nil {
 		log.Fatal("❌ Failed to read assets.json: ", err)
 	}
