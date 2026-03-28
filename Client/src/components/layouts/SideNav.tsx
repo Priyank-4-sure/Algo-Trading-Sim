@@ -1,21 +1,21 @@
-import { LineChart, BarChart2, PieChart, History, Settings, Activity, ChevronRight } from 'lucide-react';
+import { LineChart, BarChart2, PieChart, History, Settings, Activity, ChevronRight, LogOut } from 'lucide-react';
 import { useState } from 'react';
-import type { PageId } from '../../App';
+import { NavLink } from 'react-router-dom'; // 1. Import NavLink
 
 interface SideNavProps {
-  activePage: PageId;
-  setActivePage: (page: PageId) => void;
+  onLogout: () => void;
 }
 
-export function SideNav({ activePage, setActivePage }: SideNavProps) {
+export function SideNav({ onLogout }: SideNavProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const navItems: { icon: React.ReactNode; label: string; page: PageId }[] = [
-    { icon: <Activity size={20} />, label: 'Trade', page: 'trade' },
-    { icon: <BarChart2 size={20} />, label: 'Markets', page: 'markets' },
-    { icon: <LineChart size={20} />, label: 'Analytics', page: 'analytics' },
-    { icon: <PieChart size={20} />, label: 'Portfolio', page: 'portfolio' },
-    { icon: <History size={20} />, label: 'History', page: 'history' },
+  // 2. Updated items to use the actual URL paths defined in App.tsx
+  const navItems = [
+    { icon: <Activity size={20} />, label: 'Trade', path: '/app/trade' },
+    { icon: <BarChart2 size={20} />, label: 'Markets', path: '/app/markets' },
+    { icon: <LineChart size={20} />, label: 'Analytics', path: '/app/analytics' },
+    { icon: <PieChart size={20} />, label: 'Portfolio', path: '/app/portfolio' },
+    { icon: <History size={20} />, label: 'History', path: '/app/history' },
   ];
 
   return (
@@ -34,32 +34,51 @@ export function SideNav({ activePage, setActivePage }: SideNavProps) {
 
       <nav className={`flex flex-col gap-3 w-full ${expanded ? 'px-3' : 'px-2'}`}>
         {navItems.map((item) => (
-          <button
-            key={item.page}
-            onClick={() => setActivePage(item.page)}
+          /* 3. Replaced <button> with <NavLink> */
+          <NavLink
+            key={item.path}
+            to={item.path}
             title={expanded ? '' : item.label}
-            className={`h-10 flex items-center rounded-xl transition-all duration-200 group relative
+            // 4. NavLink provides an 'isActive' boolean in its className callback
+            className={({ isActive }) => `
+              h-10 flex items-center rounded-xl transition-all duration-200 group relative
               ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}
-              ${activePage === item.page
+              ${isActive
                 ? 'bg-panel border border-white/20 text-main shadow-sm'
                 : 'text-muted hover:bg-panel hover:text-main border border-transparent'
-              }`}
+              }
+            `}
           >
-            <div className={`transition-transform duration-200 ${activePage === item.page ? '' : 'group-hover:scale-110 shrink-0'}`}>
-              {item.icon}
-            </div>
-            {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">{item.label}</span>}
-          </button>
+            {({ isActive }) => (
+              <>
+                <div className={`transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110 shrink-0'}`}>
+                  {item.icon}
+                </div>
+                {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">{item.label}</span>}
+              </>
+            )}
+          </NavLink>
         ))}
       </nav>
 
-      <div className={`mt-auto w-full ${expanded ? 'px-3' : 'px-2'}`}>
+      <div className={`mt-auto w-full flex flex-col gap-2 ${expanded ? 'px-3' : 'px-2'}`}>
         <button className={`h-10 flex items-center rounded-xl transition-all duration-300 group
               ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}
               text-muted hover:text-main hover:bg-panel hover:rotate-6
         `}>
           <div className="shrink-0 transition-transform group-hover:rotate-45 duration-300"><Settings size={20} /></div>
           {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">Settings</span>}
+        </button>
+        
+        <button 
+          onClick={onLogout}
+          title={expanded ? '' : 'Log Out'}
+          className={`h-10 flex items-center rounded-xl transition-all duration-300 group
+              ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}
+              text-red-500/70 hover:text-red-500 hover:bg-red-500/10
+        `}>
+          <div className="shrink-0 transition-transform"><LogOut size={20} /></div>
+          {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">Log Out</span>}
         </button>
       </div>
     </aside>

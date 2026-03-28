@@ -1,16 +1,155 @@
 package handlers
 
-import "net/http"
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/api/middleware"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
+)
 
-func (h *Handler) GetPortfolio(w http.ResponseWriter, r *http.Request){
-	// Retrieve the user's portfolio (e.g., current holdings, total value, etc.)
+func (h *Handler) GetPortfolio(w http.ResponseWriter, r *http.Request) {
+
+	ctxValue := r.Context().Value(middleware.UserIDKey)
+
+	userID, ok := ctxValue.(uint)
+
+	if !ok {
+		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid user ID in context", nil))
+		return
+	}
+
+	var portfolio models.Portfolio
+	result := h.DB.Primary.Preload("Holdings").First(&portfolio, "user_id = ?", userID)
+
+	if result.Error != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve portfolio", result.Error))
+		return
+	}
+	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("Portfolio retrieved successfully", portfolio))
 }
 
-func (h *Handler) GetPortfolioHistory(w http.ResponseWriter, r *http.Request){
-	// Retrieve the historical portfolio values for the user (e.g., for charting purposes)
+func (h *Handler) GetPortfolioHistory(w http.ResponseWriter, r *http.Request) {
+	// 1. Safely extract the User ID from the context (Assuming it's a uint from JWT)
+	ctxValue := r.Context().Value(middleware.UserIDKey)
+	if ctxValue == nil {
+		response.WriteJson(w, http.StatusUnauthorized, response.GeneralError("Unauthorized access", nil))
+		return
+	}
+	userID := ctxValue.(uint)
+	userIDStr := fmt.Sprintf("%d", userID) // Convert to string for Redis keys
+	ctx := r.Context()
+
+	// ==========================================
+	// PART 1: Fetch Orders from Redis
+	// ==========================================
+	var orders []models.Order = []models.Order{} // Initialize as empty array so JSON doesn't return null
+
+	indexKey := "orders:user:" + userIDStr
+	orderIDs, err := h.DB.Redis.ZRange(ctx, indexKey, 0, -1).Result()
+	if err != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to fetch order index", err))
+		return
+	}
+
+	// Only attempt MGET if the user actually has orders
+	if len(orderIDs) > 0 {
+		var keys []string
+		for _, id := range orderIDs {
+			keys = append(keys, "order:"+id)
+		}
+
+		rawOrders, err := h.DB.Redis.MGet(ctx, keys...).Result()
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to fetch orders from Redis", err))
+			return
+		}
+
+		for i, raw := range rawOrders {
+			if raw == nil {
+				continue // Skip expired orders
+			}
+
+			var o models.Order
+			if err := json.Unmarshal([]byte(raw.(string)), &o); err == nil {
+				orders = append(orders, o)
+			} else {
+				log.Printf("Failed to unmarshal order %s: %v", orderIDs[i], err)
+			}
+		}
+	}
+
+	// ==========================================
+	// PART 2: Fetch Holdings from Postgres
+	// ==========================================
+	var holdings []models.Holding
+	if err := h.DB.Primary.Where("user_id = ?", userID).Find(&holdings).Error; err != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve holdings", err))
+		return
+	}
+
+	// ==========================================
+	// PART 3: Fetch Trades from Postgres
+	// ==========================================
+	var trades []models.TradeMessage
+	// Use explicit OR syntax to check if they were the Maker OR the Taker
+	if err := h.DB.Primary.Where("maker_user_id = ? OR taker_user_id = ?", userID, userID).Find(&trades).Error; err != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve trades", err))
+		return
+	}
+
+	// ==========================================
+	// PART 4: Serve the Combined JSON
+	// ==========================================
+	response.WriteJson(w, http.StatusOK, map[string]interface{}{
+		"status":  "success",
+		"message": "Portfolio history retrieved successfully",
+		"data": map[string]interface{}{
+			"orders":   orders,
+			"holdings": holdings,
+			"trades":   trades,
+		},
+	})
 }
 
-func (h *Handler) ResetPortfolio(w http.ResponseWriter, r *http.Request){
+func (h *Handler) ResetPortfolio(w http.ResponseWriter, r *http.Request) {
 	// Reset the user's portfolio to the initial state (e.g., for a new simulation run)
+	CtxValue := r.Context().Value(middleware.UserIDKey)
+	userID, ok := CtxValue.(uint)
+
+	if !ok {
+		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid user ID in context", nil))
+		return
+	}
+
+	// clear User Holdings
+
+	var Holdings []models.Holding
+	result := h.DB.Primary.Where("user_id = ?", userID).Delete(&Holdings)
+	if result.Error != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to reset portfolio", result.Error))
+		return
+	}
+
+	// Reset User Balance
+	var portfolio models.Portfolio
+	result = h.DB.Primary.Where("user_id = ?", userID).First(&portfolio)
+	if result.Error != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to reset portfolio", result.Error))
+		return
+	}
+
+	portfolio.Balance = 100000.00 // Reset to initial balance
+	result = h.DB.Primary.Save(&portfolio)
+
+	if result.Error != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to reset portfolio", result.Error))
+		return
+	}
+
+	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("Portfolio reset successfully", nil))
+
 }
