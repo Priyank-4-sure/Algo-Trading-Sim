@@ -87,7 +87,7 @@ func main() {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections)
+	apphandlers := handlers.New(dbConnections, orderStream)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
@@ -107,15 +107,15 @@ func main() {
 			// We format a fake orderbook payload just for testing the pipe
 			priceStr := strconv.FormatFloat(trade.Price, 'f', 2, 64)
 			qtyStr := strconv.FormatInt(trade.Quantity, 10)
-			
+
 			fakeUpdate := models.OrderbookUpdate{
 				Symbol: trade.Symbol,
-				Bids: [][]string{{priceStr, qtyStr}},
-				Asks: [][]string{},
+				Bids:   [][]string{{priceStr, qtyStr}},
+				Asks:   [][]string{},
 			}
-			
+
 			payload, _ := json.Marshal(fakeUpdate)
-			
+
 			// Publish to the channel the WebSocket is listening to
 			dbConnections.Redis.Publish(context.Background(), "orderbook:"+trade.Symbol, payload)
 			// ---------------------------------------
