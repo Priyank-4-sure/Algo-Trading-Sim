@@ -131,17 +131,7 @@ func main() {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
-	// 3. Init financial storage and run schema migration
-	if dbConnections.Candlestick == nil || dbConnections.Redis == nil {
-		log.Fatal("Candlestick DB or Redis connection is nil")
-	}
-	if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
-		log.Fatal("Failed to run storage schema migration:", err)
-	}
-	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
-
-	// 4. HTTP handlers scaffold
-	apphandlers := handlers.New(dbConnections)
+	apphandlers := handlers.New(dbConnections, orderStream)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
@@ -160,8 +150,22 @@ func main() {
 			log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
 				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
 
-			// 7a. Persist trade to TimescaleDB + update Redis candle & recent trades
-			store.HandleTrade(trade)
+			// --- NEW: PUBLISH THE TRADE TO REDIS ---
+			// We format a fake orderbook payload just for testing the pipe
+			priceStr := strconv.FormatFloat(trade.Price, 'f', 2, 64)
+			qtyStr := strconv.FormatInt(trade.Quantity, 10)
+
+			fakeUpdate := models.OrderbookUpdate{
+				Symbol: trade.Symbol,
+				Bids:   [][]string{{priceStr, qtyStr}},
+				Asks:   [][]string{},
+			}
+
+			payload, _ := json.Marshal(fakeUpdate)
+
+			// Publish to the channel the WebSocket is listening to
+			dbConnections.Redis.Publish(context.Background(), "orderbook:"+trade.Symbol, payload)
+			// ---------------------------------------
 
 			// 7b. Publish real-time trade event to Redis Pub/Sub for WebSocket hub
 			payload, _ := json.Marshal(trade)
