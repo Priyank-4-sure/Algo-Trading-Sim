@@ -166,9 +166,10 @@ func (s *Store) InsertOrder(order models.Order) {
 		}
 
 		score := float64(time.Now().UnixNano())
+		userIdStr := fmt.Sprintf("%d", order.UserID)
 
 		// Index by user ID — so we can fetch all orders for a user
-		s.redis.ZAdd(s.ctx, "orders:user:"+order.UserID, redis.Z{
+		s.redis.ZAdd(s.ctx, "orders:user:"+userIdStr, redis.Z{
 			Score:  score,
 			Member: order.ID,
 		})
@@ -180,7 +181,7 @@ func (s *Store) InsertOrder(order models.Order) {
 		})
 
 		log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%s symbol=%s)",
-			order.ID, order.UserID, order.Symbol)
+			order.ID, userIdStr, order.Symbol)
 	}(order)
 }
 

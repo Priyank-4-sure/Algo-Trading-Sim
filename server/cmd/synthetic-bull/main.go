@@ -131,6 +131,14 @@ func main() {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
+	// ⭐️ THE FIX: Initialize the global store variable here ⭐️
+	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
+
+    // Optional but recommended: run the schema migrations here too
+    if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
+        log.Fatal("Failed to init storage schema:", err)
+    }
+
 	apphandlers := handlers.New(dbConnections, orderStream)
 	r := api.SetupRouter(apphandlers)
 
@@ -168,7 +176,7 @@ func main() {
 			// ---------------------------------------
 
 			// 7b. Publish real-time trade event to Redis Pub/Sub for WebSocket hub
-			payload, _ := json.Marshal(trade)
+			payload, _ = json.Marshal(trade)
 			dbConnections.Redis.Publish(
 				context.Background(),
 				"trades:"+trade.Symbol,
