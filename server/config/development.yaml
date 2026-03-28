@@ -5,6 +5,8 @@ server:
   environment: "development"
   log_level: "debug" # Super verbose logging for local dev
   graceful_shutdown_timeout: "10s"
+  jwt_secret: "your_super_secret_access_token_key"
+  jwt_refresh_secret: "your_super_secret_refresh_token_key"
 
 # Primary Relational Database
 # Use this for: Users, Passwords, Alert Rules, Subscriptions
