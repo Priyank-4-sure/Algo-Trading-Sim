@@ -179,7 +179,7 @@ func main() {
 		}
 	}()
 
-	// 8. GBM Market Manager (baseline price engine)
+	// 4. Start the GBM Market Manager (Physics Engine)
 	marketManager := gbm.NewMarketManager()
 	symbol := "TECH"
 	marketManager.AddAsset(symbol, "BLUE_CHIP", 100.00)
