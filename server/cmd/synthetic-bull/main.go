@@ -23,7 +23,6 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/synthetic"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/storage"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
-	"github.com/coder/websocket"
 )
 
 // Global channels
@@ -74,40 +73,6 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 		"status":   "QUEUED",
 		"details":  req,
 	})
-}
-
-// --------------------
-// WebSocket Handler (echo stub — broadcaster comes later)
-// --------------------
-
-func wsHandler(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // DEV ONLY
-	})
-	if err != nil {
-		log.Println("WS accept error:", err)
-		return
-	}
-	defer conn.Close(websocket.StatusInternalError, "internal error")
-
-	ctx := r.Context()
-	log.Println("Client connected")
-
-	for {
-		_, msg, err := conn.Read(ctx)
-		if err != nil {
-			log.Println("Read error:", err)
-			break
-		}
-		log.Printf("Received: %s\n", string(msg))
-		if err := conn.Write(ctx, websocket.MessageText, msg); err != nil {
-			log.Println("Write error:", err)
-			break
-		}
-	}
-
-	conn.Close(websocket.StatusNormalClosure, "bye")
-	log.Println("Client disconnected")
 }
 
 // --------------------
