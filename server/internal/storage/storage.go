@@ -36,6 +36,8 @@ type TradeRecord struct {
 	Quantity     int64     `gorm:"column:quantity"`
 	MakerOrderID string    `gorm:"column:maker_order_id"`
 	TakerOrderID string    `gorm:"column:taker_order_id"`
+	MakerUserID  uint      `gorm:"column:maker_user_id"`
+	TakerUserID  uint      `gorm:"column:taker_user_id"`
 	ExecutedAt   time.Time `gorm:"column:executed_at;index"`
 }
 
@@ -97,12 +99,18 @@ func InitSchema(tsdb *gorm.DB) error {
 			quantity       BIGINT      NOT NULL,
 			maker_order_id TEXT        NOT NULL,
 			taker_order_id TEXT        NOT NULL,
+			maker_user_id  BIGINT      NOT NULL DEFAULT 0,
+			taker_user_id  BIGINT      NOT NULL DEFAULT 0,
 			executed_at    TIMESTAMPTZ NOT NULL,
 			PRIMARY KEY (id, executed_at)
 		)
 	`).Error; err != nil {
 		return fmt.Errorf("trade_records creation failed: %w", err)
 	}
+
+	// Add user ID columns if they don't exist (for existing tables)
+	tsdb.Exec(`ALTER TABLE trade_records ADD COLUMN IF NOT EXISTS maker_user_id BIGINT NOT NULL DEFAULT 0`)
+	tsdb.Exec(`ALTER TABLE trade_records ADD COLUMN IF NOT EXISTS taker_user_id BIGINT NOT NULL DEFAULT 0`)
 
 	// 3. Symbol index for fast per-symbol range queries
 	tsdb.Exec(`
@@ -264,6 +272,8 @@ func (s *Store) HandleTrade(trade models.TradeMessage) {
 		Quantity:     trade.Quantity,
 		MakerOrderID: trade.MakerOrderID,
 		TakerOrderID: trade.TakerOrderID,
+		MakerUserID:  trade.MakerUserID,
+		TakerUserID:  trade.TakerUserID,
 		ExecutedAt:   time.Unix(0, trade.Timestamp),
 	}
 	if err := s.tsdb.Create(&record).Error; err != nil {
@@ -504,11 +514,24 @@ func (s *Store) GetMidPrice(symbol string) (string, error) {
 func (s *Store) GetTradesBySymbol(symbol string, limit int) ([]TradeRecord, error) {
 	var trades []TradeRecord
 	err := s.tsdb.
-		Raw(`SELECT id, symbol, price, quantity, maker_order_id, taker_order_id, executed_at
+		Raw(`SELECT id, symbol, price, quantity, maker_order_id, taker_order_id, maker_user_id, taker_user_id, executed_at
 			 FROM trade_records
 			 WHERE symbol = ?
 			 ORDER BY executed_at DESC
 			 LIMIT ?`, symbol, limit).
+		Scan(&trades).Error
+	return trades, err
+}
+
+// GetTradesByUserID queries trade_records for all trades involving a given user.
+// Matches trades where the user was either the maker or the taker.
+func (s *Store) GetTradesByUserID(userID uint) ([]TradeRecord, error) {
+	var trades []TradeRecord
+	err := s.tsdb.
+		Raw(`SELECT id, symbol, price, quantity, maker_order_id, taker_order_id, maker_user_id, taker_user_id, executed_at
+			 FROM trade_records
+			 WHERE maker_user_id = ? OR taker_user_id = ?
+			 ORDER BY executed_at DESC`, userID, userID).
 		Scan(&trades).Error
 	return trades, err
 }
