@@ -1,4 +1,4 @@
-import { LineChart, BarChart2, PieChart, History, Settings, Activity, ChevronRight, LogOut } from 'lucide-react';
+import { LineChart, BarChart2, PieChart, History, Settings, Activity, Menu, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom'; // 1. Import NavLink
 
@@ -20,16 +20,15 @@ export function SideNav({ onLogout }: SideNavProps) {
 
   return (
     <aside className={`${expanded ? 'w-48' : 'w-16'} hidden md:flex flex-col items-center py-3 border-r border-main bg-panel shrink-0 z-20 transition-all duration-300 ease-in-out relative font-sans`}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="absolute -right-3 top-6 bg-main text-main rounded-full p-0.5 z-30 hover:bg-panel transition-colors border-2 border-panel"
-      >
-        <ChevronRight size={14} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
-      </button>
-
-      <div className={`flex items-center mb-10 transition-all ${expanded ? 'w-full px-6' : 'justify-center w-full'}`}>
-        <span className="text-main font-black text-2xl tracking-tighter font-display">N</span>
-        {expanded && <span className="ml-2 text-main font-extrabold tracking-[0.2em] text-sm font-display">EXTBULL</span>}
+      <div className={`flex items-center mb-6 transition-all ${expanded ? 'w-full px-3' : 'justify-center w-full'}`}>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="p-2 rounded-lg hover:bg-main transition-colors text-muted hover:text-main"
+          title={expanded ? "Collapse menu" : "Expand menu"}
+        >
+          <Menu size={20} />
+        </button>
+        {expanded && <span className="ml-2 text-muted font-medium text-xs uppercase tracking-wider">Menu</span>}
       </div>
 
       <nav className={`flex flex-col gap-3 w-full ${expanded ? 'px-3' : 'px-2'}`}>
