@@ -214,12 +214,12 @@ func (s *Store) InsertOrder(order models.Order) {
 		key := "order:" + order.ID
 		data, err := json.Marshal(order)
 		if err != nil {
-			log.Printf("[Storage] InsertOrder marshal failed for %s: %v", order.ID, err)
+			// log.Printf("[Storage] InsertOrder marshal failed for %s: %v", order.ID, err)
 			return
 		}
 
 		if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
-			log.Printf("[Storage] InsertOrder Redis set failed for %s: %v", order.ID, err)
+			// log.Printf("[Storage] InsertOrder Redis set failed for %s: %v", order.ID, err)
 			return
 		}
 
@@ -235,8 +235,8 @@ func (s *Store) InsertOrder(order models.Order) {
 			Member: order.ID,
 		})
 
-		log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%d symbol=%s)",
-			order.ID, order.UserID, order.Symbol)
+		// log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%d symbol=%s)",
+			// order.ID, order.UserID, order.Symbol)
 	}(order)
 }
 
@@ -267,7 +267,7 @@ func (s *Store) HandleTrade(trade models.TradeMessage) {
 		ExecutedAt:   time.Unix(0, trade.Timestamp),
 	}
 	if err := s.tsdb.Create(&record).Error; err != nil {
-		log.Printf("[Storage] InsertTrade failed: %v", err)
+		// log.Printf("[Storage] InsertTrade failed: %v", err)
 	}
 
 	// 2. Update fill status on Redis order JSON
@@ -295,7 +295,7 @@ func (s *Store) updateOrderStatusRedis(orderID string, filledQty int64) {
 
 	var order models.Order
 	if err := json.Unmarshal([]byte(raw), &order); err != nil {
-		log.Printf("[Storage] updateOrderStatusRedis unmarshal failed for %s: %v", orderID, err)
+		// log.Printf("[Storage] updateOrderStatusRedis unmarshal failed for %s: %v", orderID, err)
 		return
 	}
 

@@ -110,7 +110,7 @@ func main() {
 		log.Fatal("Failed to init storage schema:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections, orderStream)
+	apphandlers := handlers.New(dbConnections, orderStream,store)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
@@ -128,8 +128,8 @@ func main() {
 	//    snapshot is already published by storage.handleLOBSnapshot via lobStream.
 	go func() {
 		for trade := range tradeStream {
-			log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
-				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
+			// log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
+				// trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
 
 			// Persist trade to TimescaleDB + update Redis candle + ring buffer
 			store.HandleTrade(trade)
@@ -184,7 +184,7 @@ func main() {
 		}
 		metaJSON, _ := json.Marshal(assetMetadata)
 		dbConnections.Redis.HSet(ctxBackground, "market:assets", a.Symbol, metaJSON)
-		log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
+		// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
 	}
 
 	time.Sleep(50 * time.Millisecond)

@@ -249,25 +249,26 @@ func (e *Engine) emitLOBSnapshot(symbol string, book *OrderBook) {
 
 // ---- Diagnostics ----
 
-func (e *Engine) logOrderBookState(symbol string, book *OrderBook) {
-	log.Printf("===== LOB STATE: %s =====", symbol)
+// func (e *Engine) logOrderBookState(symbol string, book *OrderBook) {
+// 	// log.Printf("===== LOB STATE: %s =====", symbol)
 
-	// Asks: print highest first (reverse the ascending slice)
-	askPrices := book.Asks.AllPrices(true)
-	for i := len(askPrices) - 1; i >= 0; i-- {
-		price := askPrices[i]
-		log.Printf("  ASK: %d shares @ ₹%.2f", book.Asks.VolumeAt(price), price)
-	}
+// 	// Asks: print highest first (reverse the ascending slice)
+// 	askPrices := book.Asks.AllPrices(true)
+// 	for i := len(askPrices) - 1; i >= 0; i-- {
+// 		// price := askPrices[i]
+// 		// log.Printf("  ASK: %d shares @ ₹%.2f", book.Asks.VolumeAt(price), price)
+// 	}
 
-	log.Printf("  -----------------------")
+// 	// log.Printf("  -----------------------")
 
-	// Bids: already descending from AllPrices
-	for _, price := range book.Bids.AllPrices(false) {
-		log.Printf("  BID: %d shares @ ₹%.2f", book.Bids.VolumeAt(price), price)
-	}
+// 	// Bids: already descending from AllPrices
+// 	for _, price := range book.Bids.AllPrices(false) {
+// 		log.Printf("  BID: %d shares @ ₹%.2f", book.Bids.VolumeAt(price), price)
+// 	}
 
-	log.Printf("=========================")
-}
+// 	log.Printf("=========================")
+// }
+
 
 // ---- Helpers ----
 

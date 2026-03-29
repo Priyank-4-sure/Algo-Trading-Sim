@@ -39,6 +39,7 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.JWTMiddleware) // Apply JWT Auth Middleware
 
+			// order Routes
 			r.Route("/orders", func(r chi.Router) {
 				r.Post("/", h.PlaceOrder)
 				r.Delete("/{id}", h.CancelOrder)
