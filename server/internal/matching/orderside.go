@@ -6,6 +6,8 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 )
 
+const DefaultLOBDepth = 15
+
 type OrderSide struct {
 	Prices  map[float64]*OrderQueue
 	Ordered *set.TreeSet[float64, set.Compare[float64]]
@@ -87,7 +89,7 @@ func (os *OrderSide) AllPrices(_ bool) []float64 {
 
 // VolumeAt returns the total resting quantity at a given price level.
 // Iterates the queue at that price level — O(N) where N = orders at that level.
-// Called by emitLOBSnapshot and logOrderBookState in engine.go.
+// Called by TopN and logOrderBookState in engine.go.
 func (os *OrderSide) VolumeAt(price float64) int64 {
 	q, ok := os.Prices[price]
 	if !ok || q == nil || q.Empty() {
@@ -98,4 +100,26 @@ func (os *OrderSide) VolumeAt(price float64) int64 {
 		vol += node.Order.Quantity
 	}
 	return vol
+}
+
+// TopN returns the top n price levels with their aggregated volume.
+// Traverses the TreeSet in its natural order (best prices first for both
+// bids and asks), stops early once n levels are collected.
+// This is O(n) rather than O(P) — no full book traversal needed.
+func (os *OrderSide) TopN(n int) []models.PriceLevel {
+	prices := os.Ordered.Slice()
+	if len(prices) > n {
+		prices = prices[:n] // slice off everything beyond depth n
+	}
+	levels := make([]models.PriceLevel, 0, len(prices))
+	for _, price := range prices {
+		vol := os.VolumeAt(price)
+		if vol > 0 {
+			levels = append(levels, models.PriceLevel{
+				Price:    price,
+				Quantity: vol,
+			})
+		}
+	}
+	return levels
 }

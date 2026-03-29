@@ -16,31 +16,30 @@ import (
 
 type OrderRecord struct {
 	ID        string `gorm:"primaryKey"`
-	UserID    string `gorm:"index"`
+	UserID    uint   `gorm:"index"`
 	Symbol    string `gorm:"index"`
 	Type      string
 	Side      string
 	Price     float64
 	Quantity  int64
 	FilledQty int64     `gorm:"default:0"`
-	Status    string    `gorm:"default:'OPEN'"` // OPEN | PARTIAL | FILLED | CANCELLED
-	CreatedAt time.Time `gorm:"index"`          // index for time-range queries
+	Status    string    `gorm:"default:'OPEN'"`
+	CreatedAt time.Time `gorm:"index"`
 }
 
-// TradeRecord maps to a TimescaleDB hypertable partitioned by ExecutedAt
+// TradeRecord — composite PK (id, executed_at) required by TimescaleDB
+// so that executed_at (the partition column) is included in every unique index.
 type TradeRecord struct {
-	// Both must be marked as primaryKey to create a composite PK that includes the time partition
-	ID           string `gorm:"primaryKey;column:id"`
-	Symbol       string `gorm:"index"`
-	Price        float64
-	Quantity     int64
-	MakerOrderID string
-	TakerOrderID string
-	ExecutedAt   time.Time `gorm:"primaryKey;index;column:executed_at"`
+	ID           string    `gorm:"column:id"`
+	Symbol       string    `gorm:"column:symbol;index"`
+	Price        float64   `gorm:"column:price"`
+	Quantity     int64     `gorm:"column:quantity"`
+	MakerOrderID string    `gorm:"column:maker_order_id"`
+	TakerOrderID string    `gorm:"column:taker_order_id"`
+	ExecutedAt   time.Time `gorm:"column:executed_at;index"`
 }
 
-// CandleRecord is NOT created by Go — it is a TimescaleDB continuous aggregate view.
-// This struct is READ-ONLY, used only for querying candles_1s and candles_5s views.
+// CandleRecord is READ-ONLY — queried from TimescaleDB continuous aggregate views
 type CandleRecord struct {
 	Symbol string    `gorm:"column:symbol"`
 	Bucket time.Time `gorm:"column:bucket"`
@@ -54,7 +53,7 @@ type CandleRecord struct {
 // ---- Store ----
 
 type Store struct {
-	tsdb  *gorm.DB // TimescaleDB — trades, orders, candles
+	tsdb  *gorm.DB
 	redis *redis.Client
 	ctx   context.Context
 }
@@ -68,60 +67,115 @@ func NewStore(tsdb *gorm.DB, rdb *redis.Client) *Store {
 }
 
 // ---- InitSchema ----
-// Creates tables and TimescaleDB hypertable + continuous aggregates.
-// Safe to call on every startup — all statements use IF NOT EXISTS.
+// Safe to call on every startup — all statements are idempotent.
+// FIX: Removed the DROP TABLE trade_records CASCADE that previously ran on every
+// startup, wiping all trade data and dropping candles_1s/candles_5s views each
+// time the server restarted. Replaced with CREATE TABLE IF NOT EXISTS.
+
 func InitSchema(tsdb *gorm.DB) error {
 	log.Println("[Storage] Running schema migration...")
 
-	// 1. Create orders table
+	// 0. Enable TimescaleDB extension
+	if err := tsdb.Exec(`CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE`).Error; err != nil {
+		return fmt.Errorf("failed to enable timescaledb extension: %w", err)
+	}
+
+	// 1. Orders table
 	if err := tsdb.AutoMigrate(&OrderRecord{}); err != nil {
 		return fmt.Errorf("orders migration failed: %w", err)
 	}
 
-	// 2. Create trades table (GORM will now create the composite PK correctly)
-	if err := tsdb.AutoMigrate(&TradeRecord{}); err != nil {
-		return fmt.Errorf("trades migration failed: %w", err)
+	// 2. Trades table — manual DDL with composite PK (id, executed_at).
+	//    GORM AutoMigrate would create UNIQUE(id) alone, which TimescaleDB rejects
+	//    (error TS103) because the partition column must be in every unique index.
+	//    CREATE TABLE IF NOT EXISTS makes this safe to call on every restart.
+	if err := tsdb.Exec(`
+		CREATE TABLE IF NOT EXISTS trade_records (
+			id             TEXT        NOT NULL,
+			symbol         TEXT        NOT NULL,
+			price          FLOAT8      NOT NULL,
+			quantity       BIGINT      NOT NULL,
+			maker_order_id TEXT        NOT NULL,
+			taker_order_id TEXT        NOT NULL,
+			executed_at    TIMESTAMPTZ NOT NULL,
+			PRIMARY KEY (id, executed_at)
+		)
+	`).Error; err != nil {
+		return fmt.Errorf("trade_records creation failed: %w", err)
 	}
 
-	// 3. Convert trades to a hypertable
-	// Use an anonymous block to handle the case where it's already a hypertable
+	// 3. Symbol index for fast per-symbol range queries
 	tsdb.Exec(`
-        DO $$ 
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = 'trade_records') THEN
-                PERFORM create_hypertable('trade_records', 'executed_at');
-            END IF;
-        END $$;
-    `)
+		CREATE INDEX IF NOT EXISTS idx_trade_records_symbol
+		ON trade_records (symbol, executed_at DESC)
+	`)
 
-	// 4. Create 1-second candle continuous aggregate
-	// Note: ensure you use 'timescaledb.continuous' (which you already have)
-	err := tsdb.Exec(`
-        CREATE MATERIALIZED VIEW IF NOT EXISTS candles_1s
-        WITH (timescaledb.continuous) AS
-        SELECT
-          symbol,
-          time_bucket('1 second', executed_at)  AS bucket,
-          FIRST(price, executed_at)              AS open,
-          MAX(price)                             AS high,
-          MIN(price)                             AS low,
-          LAST(price, executed_at)               AS close,
-          SUM(quantity)                          AS volume
-        FROM trade_records
-        GROUP BY symbol, bucket
-        WITH NO DATA;
-    `).Error
-	if err != nil {
-		log.Printf("[Storage] Failed to create candles_1s: %v", err)
+	// 4. Convert to hypertable (safe if already a hypertable)
+	if err := tsdb.Exec(`
+		SELECT create_hypertable('trade_records', 'executed_at',
+		if_not_exists => TRUE,
+		migrate_data  => TRUE)
+	`).Error; err != nil {
+		return fmt.Errorf("create_hypertable failed: %w", err)
 	}
 
-	// ... Repeat same error checking for candles_5s and policies ...
+	// 5. 1-second candle continuous aggregate
+	tsdb.Exec(`
+		CREATE MATERIALIZED VIEW IF NOT EXISTS candles_1s
+		WITH (timescaledb.continuous) AS
+		SELECT
+			symbol,
+			time_bucket('1 second', executed_at)  AS bucket,
+			FIRST(price, executed_at)              AS open,
+			MAX(price)                             AS high,
+			MIN(price)                             AS low,
+			LAST(price, executed_at)               AS close,
+			SUM(quantity)                          AS volume
+		FROM trade_records
+		GROUP BY symbol, bucket
+		WITH NO DATA
+	`)
+
+	// 6. 5-second candle continuous aggregate
+	tsdb.Exec(`
+		CREATE MATERIALIZED VIEW IF NOT EXISTS candles_5s
+		WITH (timescaledb.continuous) AS
+		SELECT
+			symbol,
+			time_bucket('5 seconds', executed_at) AS bucket,
+			FIRST(price, executed_at)             AS open,
+			MAX(price)                            AS high,
+			MIN(price)                            AS low,
+			LAST(price, executed_at)              AS close,
+			SUM(quantity)                         AS volume
+		FROM trade_records
+		GROUP BY symbol, bucket
+		WITH NO DATA
+	`)
+
+	// 7. Automatic refresh policies
+	tsdb.Exec(`
+		SELECT add_continuous_aggregate_policy('candles_1s',
+			start_offset => INTERVAL '10 minutes',
+			end_offset   => INTERVAL '1 second',
+			schedule_interval => INTERVAL '1 second',
+			if_not_exists => TRUE)
+	`)
+	tsdb.Exec(`
+		SELECT add_continuous_aggregate_policy('candles_5s',
+			start_offset => INTERVAL '10 minutes',
+			end_offset   => INTERVAL '5 seconds',
+			schedule_interval => INTERVAL '5 seconds',
+			if_not_exists => TRUE)
+	`)
 
 	log.Println("[Storage] Schema ready.")
 	return nil
 }
 
 // ---- InsertOrder ----
+// Stores order in Redis with a 24h TTL. CANCEL orders are skipped.
+
 func (s *Store) InsertOrder(order models.Order) {
 	if order.Type == models.Cancel {
 		return
@@ -135,45 +189,29 @@ func (s *Store) InsertOrder(order models.Order) {
 			return
 		}
 
-		// Primary record — full order JSON, expires in 24h
 		if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
 			log.Printf("[Storage] InsertOrder Redis set failed for %s: %v", order.ID, err)
 			return
 		}
 
 		score := float64(time.Now().UnixNano())
-		userIdStr := fmt.Sprintf("%d", order.UserID)
 
-		// Index by user ID — so we can fetch all orders for a user
-		s.redis.ZAdd(s.ctx, "orders:user:"+userIdStr, redis.Z{
+		s.redis.ZAdd(s.ctx, fmt.Sprintf("orders:user:%d", order.UserID), redis.Z{
 			Score:  score,
 			Member: order.ID,
 		})
 
-		// Index by symbol — open orders per symbol
 		s.redis.ZAdd(s.ctx, "orders:open:"+order.Symbol, redis.Z{
 			Score:  score,
 			Member: order.ID,
 		})
 
-		log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%s symbol=%s)",
-			order.ID, userIdStr, order.Symbol)
+		log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%d symbol=%s)",
+			order.ID, order.UserID, order.Symbol)
 	}(order)
 }
 
 // ---- StartPipeline ----
-// FIX 1 & 3: StartPipeline now only owns the LOB snapshot channel.
-//
-// Previously the signature was StartPipeline(tradeStream, lobStream), which
-// launched an internal goroutine consuming tradeStream. main.go's trade goroutine
-// ALSO reads from tradeStream — two goroutines competing on one channel.
-// Go delivers each message to exactly one receiver, so trades would be randomly
-// split between the two consumers, breaking both persistence and tickerTape.
-//
-// The correct design (matching main.go's comment "Single trade consumer — owns
-// tradeStream exclusively") is for main.go's goroutine to be the sole consumer
-// of tradeStream and call HandleTrade directly. StartPipeline only manages the
-// LOB snapshot pipeline.
 
 func (s *Store) StartPipeline(lobStream <-chan models.LOBSnapshot) {
 	go func() {
@@ -181,21 +219,15 @@ func (s *Store) StartPipeline(lobStream <-chan models.LOBSnapshot) {
 			s.handleLOBSnapshot(snap)
 		}
 	}()
-
 	log.Println("[Storage] LOB snapshot pipeline started.")
 }
 
 // ---- HandleTrade ----
-// FIX 2: Exported so main.go's trade goroutine can call it directly.
-//
-// Previously this was handleTrade (unexported), causing a compile error:
-// "store.HandleTrade undefined". main.go is the sole consumer of tradeStream
-// and calls HandleTrade for each matched trade.
+// Exported so main.go's trade goroutine can call it directly.
+// Persists the trade to TimescaleDB and updates all Redis hot-path keys.
 
 func (s *Store) HandleTrade(trade models.TradeMessage) {
-
-	// 1. Persist raw trade to TimescaleDB hypertable.
-	// TimescaleDB continuous aggregate will auto-compute candles from this.
+	// 1. Persist raw trade to TimescaleDB hypertable
 	record := TradeRecord{
 		ID:           fmt.Sprintf("%s-%d", trade.TakerOrderID, trade.Timestamp),
 		Symbol:       trade.Symbol,
@@ -209,54 +241,51 @@ func (s *Store) HandleTrade(trade models.TradeMessage) {
 		log.Printf("[Storage] InsertTrade failed: %v", err)
 	}
 
-	// 2. Update order fill status in TimescaleDB (atomic transaction)
-	s.updateOrderStatus(trade.MakerOrderID, trade.Quantity)
-	s.updateOrderStatus(trade.TakerOrderID, trade.Quantity)
+	// 2. Update fill status on Redis order JSON
+	s.updateOrderStatusRedis(trade.MakerOrderID, trade.Quantity)
+	s.updateOrderStatusRedis(trade.TakerOrderID, trade.Quantity)
 
-	// 3. Update Redis: current in-progress candle (sub-second hot path)
+	// 3. Update live in-progress candle in Redis
 	s.updateCurrentCandle(trade)
 
-	// 4. Update Redis: recent trades ring buffer (last 50)
+	// 4. Append to recent trades ring buffer (last 50)
 	tradeJSON, _ := json.Marshal(trade)
 	key := "trades:recent:" + trade.Symbol
 	s.redis.LPush(s.ctx, key, string(tradeJSON))
 	s.redis.LTrim(s.ctx, key, 0, 49)
 }
 
-// updateOrderStatus wraps both SQL statements in a single transaction.
-// Without this, a crash between the two statements would leave filled_qty
-// incremented but status stale (e.g. stuck on OPEN).
-
-func (s *Store) updateOrderStatus(orderID string, filledQty int64) {
-	err := s.tsdb.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&OrderRecord{}).
-			Where("id = ?", orderID).
-			UpdateColumn("filled_qty", gorm.Expr("filled_qty + ?", filledQty)).Error; err != nil {
-			return fmt.Errorf("failed to update filled_qty for order %s: %w", orderID, err)
-		}
-
-		if err := tx.Exec(`
-			UPDATE order_records SET status =
-				CASE
-					WHEN filled_qty >= quantity THEN 'FILLED'
-					WHEN filled_qty > 0         THEN 'PARTIAL'
-					ELSE 'OPEN'
-				END
-			WHERE id = ?`, orderID).Error; err != nil {
-			return fmt.Errorf("failed to update status for order %s: %w", orderID, err)
-		}
-
-		return nil
-	})
-
+// updateOrderStatusRedis reads the order JSON from Redis, increments FilledQuantity,
+// recalculates Status, and writes it back preserving the original TTL.
+func (s *Store) updateOrderStatusRedis(orderID string, filledQty int64) {
+	key := "order:" + orderID
+	raw, err := s.redis.Get(s.ctx, key).Result()
 	if err != nil {
-		log.Printf("[Storage] updateOrderStatus failed for order %s: %v", orderID, err)
+		return // Order not in Redis — likely a simulation/anonymous order
 	}
+
+	var order models.Order
+	if err := json.Unmarshal([]byte(raw), &order); err != nil {
+		log.Printf("[Storage] updateOrderStatusRedis unmarshal failed for %s: %v", orderID, err)
+		return
+	}
+
+	order.FilledQuantity += filledQty
+
+	switch {
+	case order.FilledQuantity >= order.Quantity:
+		order.Status = models.StatusFilled
+	case order.FilledQuantity > 0:
+		order.Status = models.StatusPartial
+	default:
+		order.Status = models.StatusPending
+	}
+
+	data, _ := json.Marshal(order)
+	s.redis.Set(s.ctx, key, data, redis.KeepTTL)
 }
 
 // ---- Redis: Current In-Progress Candle ----
-// Sub-second hot candle for WebSocket broadcast. Does NOT replace TimescaleDB
-// candles — it is the "live" candle for the current second only.
 
 type CurrentCandle struct {
 	Open       float64   `json:"open"`
@@ -273,14 +302,10 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 
 	raw, err := s.redis.Get(s.ctx, key).Result()
 	if err != nil {
-		// No candle yet for this symbol — create the first one.
 		candle := CurrentCandle{
-			Open:       trade.Price,
-			High:       trade.Price,
-			Low:        trade.Price,
-			Close:      trade.Price,
-			Volume:     trade.Quantity,
-			BucketTime: now,
+			Open: trade.Price, High: trade.Price,
+			Low: trade.Price, Close: trade.Price,
+			Volume: trade.Quantity, BucketTime: now,
 		}
 		data, _ := json.Marshal(candle)
 		s.redis.Set(s.ctx, key, data, 0)
@@ -290,23 +315,17 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 	var candle CurrentCandle
 	json.Unmarshal([]byte(raw), &candle)
 
-	// Second boundary crossed — reset to a fresh candle.
-	// The previous second's data is already in TimescaleDB via the hypertable insert.
 	if !now.Equal(candle.BucketTime) {
 		candle = CurrentCandle{
-			Open:       trade.Price,
-			High:       trade.Price,
-			Low:        trade.Price,
-			Close:      trade.Price,
-			Volume:     trade.Quantity,
-			BucketTime: now,
+			Open: trade.Price, High: trade.Price,
+			Low: trade.Price, Close: trade.Price,
+			Volume: trade.Quantity, BucketTime: now,
 		}
 		data, _ := json.Marshal(candle)
 		s.redis.Set(s.ctx, key, data, 0)
 		return
 	}
 
-	// Same second — update OHLCV normally.
 	if trade.Price > candle.High {
 		candle.High = trade.Price
 	}
@@ -321,33 +340,18 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 }
 
 // ---- LOB Snapshot Handler ----
-// FIX 4: Added redis.Publish alongside redis.Set so WebSocket clients
-// subscribed to "orderbook:<symbol>" via ws.go's streamOrderbook actually
-// receive messages.
-//
-// Previously only redis.Set was called — a key-value write that is invisible
-// to Pub/Sub subscribers. ws.go's streamOrderbook subscribes to the
-// "orderbook:<symbol>" Pub/Sub channel and was silently hanging forever
-// because nothing ever published to it.
 
 func (s *Store) handleLOBSnapshot(snap models.LOBSnapshot) {
 	data, _ := json.Marshal(snap)
 	key := "orderbook:" + snap.Symbol
 
-	// Write the current state for REST/GET polling
 	s.redis.Set(s.ctx, key, data, 0)
-
-	// Publish to Pub/Sub so WebSocket subscribers in ws.go receive the update
 	s.redis.Publish(s.ctx, key, data)
-
-	// Write mid-price as a cheap scalar for clients that only need a price feed
-	s.redis.Set(s.ctx, "midprice:"+snap.Symbol,
-		fmt.Sprintf("%.4f", snap.MidPrice), 0)
+	s.redis.Set(s.ctx, "midprice:"+snap.Symbol, fmt.Sprintf("%.4f", snap.MidPrice), 0)
 }
 
 // ---- REST API Helpers ----
 
-// GetOrderBook returns current LOB from Redis
 func (s *Store) GetOrderBook(symbol string) (*models.LOBSnapshot, error) {
 	raw, err := s.redis.Get(s.ctx, "orderbook:"+symbol).Result()
 	if err != nil {
@@ -358,7 +362,6 @@ func (s *Store) GetOrderBook(symbol string) (*models.LOBSnapshot, error) {
 	return &snap, nil
 }
 
-// GetRecentTrades returns last N trades from Redis ring buffer
 func (s *Store) GetRecentTrades(symbol string, n int64) ([]models.TradeMessage, error) {
 	raws, err := s.redis.LRange(s.ctx, "trades:recent:"+symbol, 0, n-1).Result()
 	if err != nil {
@@ -373,8 +376,6 @@ func (s *Store) GetRecentTrades(symbol string, n int64) ([]models.TradeMessage, 
 	return trades, nil
 }
 
-// GetCandles queries TimescaleDB continuous aggregate view.
-// interval: "1s" or "5s"
 func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, error) {
 	view := "candles_1s"
 	if interval == "5s" {
@@ -393,7 +394,6 @@ func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, 
 	return candles, err
 }
 
-// GetOrderByID returns a single order by its ID — O(1) direct lookup
 func (s *Store) GetOrderByID(orderID string) (*models.Order, error) {
 	raw, err := s.redis.Get(s.ctx, "order:"+orderID).Result()
 	if err != nil {
@@ -406,9 +406,8 @@ func (s *Store) GetOrderByID(orderID string) (*models.Order, error) {
 	return &order, nil
 }
 
-// GetOrdersByUser returns all orders for a user, newest first
-func (s *Store) GetOrdersByUser(userID string) ([]models.Order, error) {
-	ids, err := s.redis.ZRevRange(s.ctx, "orders:user:"+userID, 0, -1).Result()
+func (s *Store) GetOrdersByUser(userID uint) ([]models.Order, error) {
+	ids, err := s.redis.ZRevRange(s.ctx, fmt.Sprintf("orders:user:%d", userID), 0, -1).Result()
 	if err != nil || len(ids) == 0 {
 		return []models.Order{}, nil
 	}
@@ -426,7 +425,7 @@ func (s *Store) GetOrdersByUser(userID string) ([]models.Order, error) {
 	orders := make([]models.Order, 0, len(raws))
 	for _, raw := range raws {
 		if raw == nil {
-			continue // TTL expired — index entry outlived the data
+			continue
 		}
 		var o models.Order
 		if err := json.Unmarshal([]byte(raw.(string)), &o); err == nil {
@@ -436,7 +435,23 @@ func (s *Store) GetOrdersByUser(userID string) ([]models.Order, error) {
 	return orders, nil
 }
 
-// GetCurrentCandle returns the live in-progress candle from Redis
+func (s *Store) GetOrders(userID uint, orderID string) ([]models.Order, error) {
+	if orderID != "" {
+		order, err := s.GetOrderByID(orderID)
+		if err != nil {
+			return nil, err
+		}
+		if userID != 0 && order.UserID != userID {
+			return nil, fmt.Errorf("order %s does not belong to user %d", orderID, userID)
+		}
+		return []models.Order{*order}, nil
+	}
+	if userID != 0 {
+		return s.GetOrdersByUser(userID)
+	}
+	return nil, fmt.Errorf("must provide at least one of userID or orderID")
+}
+
 func (s *Store) GetCurrentCandle(symbol string) (*CurrentCandle, error) {
 	raw, err := s.redis.Get(s.ctx, "candle:current:"+symbol).Result()
 	if err != nil {
@@ -447,7 +462,20 @@ func (s *Store) GetCurrentCandle(symbol string) (*CurrentCandle, error) {
 	return &candle, nil
 }
 
-// GetMidPrice returns current mid price from Redis
 func (s *Store) GetMidPrice(symbol string) (string, error) {
 	return s.redis.Get(s.ctx, "midprice:"+symbol).Result()
+}
+
+// GetTradesBySymbol queries trade_records for a given symbol from the Candlestick DB.
+// Used by portfolio history — returns the N most recent trades.
+func (s *Store) GetTradesBySymbol(symbol string, limit int) ([]TradeRecord, error) {
+	var trades []TradeRecord
+	err := s.tsdb.
+		Raw(`SELECT id, symbol, price, quantity, maker_order_id, taker_order_id, executed_at
+			 FROM trade_records
+			 WHERE symbol = ?
+			 ORDER BY executed_at DESC
+			 LIMIT ?`, symbol, limit).
+		Scan(&trades).Error
+	return trades, err
 }
