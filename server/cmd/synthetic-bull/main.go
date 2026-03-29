@@ -99,10 +99,16 @@ func main() {
 	// 3. Schema migration BEFORE creating the Store — tables must exist first.
 	//    From File 2: correct order. File 1 had NewStore before InitSchema which
 	//    meant the store could be used against a database with no tables.
+
+	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
+
+	if err := store.ResetDatabase(); err != nil {
+		log.Fatalf("Database reset failed: %v", err)
+	}
+
 	if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
 		log.Fatal("Failed to init storage schema:", err)
 	}
-	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
 
 	apphandlers := handlers.New(dbConnections, orderStream)
 	r := api.SetupRouter(apphandlers)

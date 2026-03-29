@@ -65,7 +65,7 @@ func (e *Engine) processOrder(order models.Order) {
 	}
 
 	e.emitLOBSnapshot(order.Symbol, book)
-	e.logOrderBookState(order.Symbol, book)
+	// e.logOrderBookState(order.Symbol, book)
 }
 
 // ---- Book Management ----

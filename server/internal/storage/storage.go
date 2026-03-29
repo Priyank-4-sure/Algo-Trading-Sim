@@ -173,6 +173,35 @@ func InitSchema(tsdb *gorm.DB) error {
 	return nil
 }
 
+// ---- Reset Database (For Development Only) ----
+
+func (s *Store) ResetDatabase() error {
+	log.Println("⚠️ [Storage] Wiping database clean...")
+
+	// 1. Flush all Redis keys
+	if err := s.redis.FlushDB(s.ctx).Err(); err != nil {
+		return fmt.Errorf("failed to flush redis: %w", err)
+	}
+
+	// 2. Drop TimescaleDB Views & Tables
+	// CASCADE is required to drop tables that have dependent materialized views
+	queries := []string{
+		"DROP MATERIALIZED VIEW IF EXISTS candles_1s CASCADE;",
+		"DROP MATERIALIZED VIEW IF EXISTS candles_5s CASCADE;",
+		"DROP TABLE IF EXISTS trade_records CASCADE;",
+		"DROP TABLE IF EXISTS order_records CASCADE;",
+	}
+
+	for _, query := range queries {
+		if err := s.tsdb.Exec(query).Error; err != nil {
+			return fmt.Errorf("failed to drop schema: %w", err)
+		}
+	}
+
+	log.Println("✅ [Storage] Database wiped successfully.")
+	return nil
+}
+
 // ---- InsertOrder ----
 // Stores order in Redis with a 24h TTL. CANCEL orders are skipped.
 
@@ -314,6 +343,7 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 
 	var candle CurrentCandle
 	json.Unmarshal([]byte(raw), &candle)
+	channelName := "candles:" + trade.Symbol
 
 	if !now.Equal(candle.BucketTime) {
 		candle = CurrentCandle{
@@ -323,6 +353,7 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 		}
 		data, _ := json.Marshal(candle)
 		s.redis.Set(s.ctx, key, data, 0)
+		s.redis.Publish(s.ctx, channelName, data)
 		return
 	}
 
@@ -337,6 +368,8 @@ func (s *Store) updateCurrentCandle(trade models.TradeMessage) {
 
 	data, _ := json.Marshal(candle)
 	s.redis.Set(s.ctx, key, data, 0)
+
+	s.redis.Publish(s.ctx, channelName, data)
 }
 
 // ---- LOB Snapshot Handler ----

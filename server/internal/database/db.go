@@ -11,7 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // Connections acts as a container for all our database pools
@@ -74,7 +73,7 @@ func connectSQL(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	// Connect using GORM
 	db, err := gorm.Open(dialector, &gorm.Config{
 		// This prints all SQL queries to your terminal (great for development)
-		Logger: logger.Default.LogMode(logger.Info),
+		// Logger: logger.Default.LogMode(logger.Info),
 	})
 
 	return db, err

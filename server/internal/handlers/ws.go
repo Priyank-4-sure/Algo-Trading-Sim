@@ -72,7 +72,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			// (In a real app, this triggers a Redis Pub/Sub subscription)
 			switch {
 			case len(msg.Topic) > 9 && msg.Topic[:9] == "orderbook":
-				go h.streamOrderbook(ctx, c, msg.Topic) // Run in a background thread
+				go h.streamLobSnapshot(ctx, c, msg.Topic) // Run in a background thread
 			case len(msg.Topic) > 7 && msg.Topic[:7] == "candles":
 				go h.streamCandles(ctx, c, msg.Topic)
 			default:
@@ -116,4 +116,66 @@ func (h *Handler) streamOrderbook(ctx context.Context, c *websocket.Conn, topic 
 	}
 }
 
-func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic string) {}
+func (h *Handler) streamLobSnapshot(ctx context.Context, c *websocket.Conn, topic string) {
+	// This Streams LOB Snapshots from redis
+	pubsub := h.DB.Redis.Subscribe(ctx, topic)
+	defer pubsub.Close()
+	ch := pubsub.Channel()
+	log.Printf("📡 Subscribed to Redis channel: %s", topic)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("🛑 Client disconnected from %s", topic)
+			return
+		case msg := <-ch:
+			var lobSnapshot models.LOBSnapshot
+			if err := json.Unmarshal([]byte(msg.Payload), &lobSnapshot); err != nil {
+				continue
+			}
+
+			if err := wsjson.Write(ctx, c, models.ServerMessage{
+				Topic: topic,
+				Data:  lobSnapshot,
+			}); err != nil {
+				return
+			}
+		}
+
+	}
+}
+
+func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic string) {
+	// 1. Subscribe to the Redis channel
+	pubsub := h.DB.Redis.Subscribe(ctx, topic)
+	defer pubsub.Close()
+	ch := pubsub.Channel()
+
+	log.Printf("📡 Subscribed to Redis channel: %s", topic)
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Context is canceled when the client disconnects or request ends
+			log.Printf("🛑 Client disconnected from %s", topic)
+			return
+
+		case msg := <-ch:
+			// 2. Use json.RawMessage to pass the JSON through efficiently
+			// without needing to decode/encode fields we aren't modifying.
+			var candleData json.RawMessage = []byte(msg.Payload)
+
+			// 3. Wrap in your standard ServerMessage
+			response := models.ServerMessage{
+				Topic: topic,
+				Data:  candleData,
+			}
+
+			// 4. Send to the frontend
+			if err := wsjson.Write(ctx, c, response); err != nil {
+				// If this fails, the client likely dropped the connection
+				return
+			}
+		}
+	}
+}
