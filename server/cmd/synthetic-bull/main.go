@@ -206,7 +206,6 @@ func main() {
 	// 11. Register routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
-	r.Get("/ws", wsHandler)
 	r.Post("/order", handleOrder)
 
 	// 12. HTTP server
