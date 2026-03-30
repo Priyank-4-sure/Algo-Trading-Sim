@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom'; // 1. Import useNavigate
 import { GuestTopNav } from '../layouts/GuestTopNav';
 
 interface LoginPageProps {
-  onLogin: () => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
   // Optional: keeping these for compatibility, but we'll use navigate() instead
@@ -13,32 +12,59 @@ interface LoginPageProps {
   onGoToHome?: () => void;
 }
 
-export function LoginPage({ onLogin, darkMode, toggleDarkMode }: LoginPageProps) {
-  const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate(); // 2. Initialize navigate
-  const [error, setError] = useState<string | null>(null);
+import { useAuth } from '../../hooks/useAuth';
+import { API_BASE_URL } from '../../config';
 
-  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+export function LoginPage({ darkMode, toggleDarkMode }: LoginPageProps) {
+  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate(); 
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
+
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Get data from form
+    setError(null);
+    setIsLoading(true);
+
     const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
-    // 1. Password Regex Constraint
-    // ^(?=.*[a-z])  -> Must contain at least one lowercase letter
-    // (?=.*\d)      -> Must contain at least one digit
-    // .{8,}         -> Must be at least 8 characters long
     const passwordRegex = /^(?=.*[a-z])(?=.*\d).{8,}$/;
-
     if (!passwordRegex.test(password)) {
       setError("Password must be at least 8 characters, include a lowercase letter and a number.");
-      return; // Stop the login/signup process
+      setIsLoading(false);
+      return;
     }
 
-    // 3. Update Auth State via prop
-    onLogin(); 
-    // 4. Redirect to the actual app route
-    navigate('/app/trade');
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+
+      // 4. Update Auth State via context
+      login(data.access_token, data.refresh_token, {
+        id: 0, // Backend currently doesn't return user ID, we'll use 0 for now
+        email: email,
+        fullName: 'Operator' // Placeholder
+      }); 
+
+      // 5. Redirect to the actual app route
+      navigate('/app/trade');
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -97,6 +123,7 @@ export function LoginPage({ onLogin, darkMode, toggleDarkMode }: LoginPageProps)
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
                   <input 
+                    name="email"
                     type="email" 
                     placeholder="trader@nextbull.in" 
                     required
@@ -158,8 +185,13 @@ export function LoginPage({ onLogin, darkMode, toggleDarkMode }: LoginPageProps)
                   {error}
                 </div>
               )}
-              <button name="password" type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-blue-600/25 mt-4 flex items-center justify-center gap-2 group transition-all active:scale-[0.97]">
-                Login <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              <button 
+                type="submit" 
+                disabled={isLoading}
+                className={`w-full ${isLoading ? 'bg-blue-800 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'} text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-blue-600/25 mt-4 flex items-center justify-center gap-2 group transition-all active:scale-[0.97]`}
+              >
+                {isLoading ? 'Authenticating...' : 'Login'} 
+                {!isLoading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
               </button>
             </form>
 
