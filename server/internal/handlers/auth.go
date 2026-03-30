@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	AccessTokenDuration  = 15 * time.Minute
+	AccessTokenDuration  = 24 * time.Hour
 	RefreshTokenDuration = 7 * 24 * time.Hour
 )
 
@@ -37,6 +37,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := models.User{
+		FullName: req.FullName,
 		Email:    req.Email,
 		Password: string(hashedPassword),
 	}

@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { Search, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 
 export function Balances() {
    const [tab, setTab] = useState<'balances' | 'watchlist'>('balances');
-   const [search, setSearch] = useState('');
-
    const watchlist = [
       { symbol: 'ETH', name: 'Ethereum', price: '3,380.20', change: '+2.4%', up: true },
       { symbol: 'SOL', name: 'Solana', price: '148.45', change: '-1.2%', up: false }
@@ -12,8 +10,12 @@ export function Balances() {
 
    return (
       <div className="flex flex-col h-full bg-panel text-sm w-full font-sans">
-         <div className="flex justify-between items-center mb-3">
-            <div className="flex bg-main p-1 rounded-lg border border-main">
+         <div className="flex justify-between items-start px-3 py-2 border-b border-main shrink-0">
+            <div className="flex flex-col">
+               <span className="font-semibold text-sm text-main leading-tight mt-1">Balances & Portfolio</span>
+               {tab === 'balances' && <span className="font-bold text-main font-mono text-xs mt-1">$42,500.00</span>}
+            </div>
+            <div className="flex bg-main p-1 rounded-lg border border-main shrink-0">
                <button 
                   onClick={() => setTab('balances')}
                   className={`text-[10px] uppercase font-bold px-3 py-1.5 rounded-md transition-colors ${tab === 'balances' ? 'bg-panel shadow text-main' : 'text-muted hover:text-main'}`}
@@ -27,16 +29,9 @@ export function Balances() {
                   Watchlist
                </button>
             </div>
-            {tab === 'balances' && <span className="font-bold text-main font-mono text-xs">$42,500.00</span>}
          </div>
 
-         {tab === 'watchlist' && (
-            <div className="flex items-center bg-main rounded-md px-2 py-1.5 border border-main gap-2 mb-3">
-               <Search size={12} className="text-muted" />
-               <input type="text" placeholder="Search to add..." value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent text-main text-xs outline-none w-full placeholder:text-muted" />
-            </div>
-         )}
-
+         <div className="flex-1 p-2 flex flex-col min-h-0 overflow-hidden">
          <div className="flex flex-col gap-2 overflow-y-auto pr-1 no-scrollbar flex-1">
             {tab === 'balances' ? (
                <>
@@ -86,6 +81,7 @@ export function Balances() {
                   ))}
                </>
             )}
+         </div>
          </div>
       </div>
    );

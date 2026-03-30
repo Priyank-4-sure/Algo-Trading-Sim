@@ -21,17 +21,23 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/noise"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/synthetic"
+	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/storage"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
 )
 
-// Global channels (Sized up based on your simulation needs)
+// Global channels
 var orderStream = make(chan models.Order, 10000)
 var tradeStream = make(chan models.TradeMessage, 10000)
+var lobStream = make(chan models.LOBSnapshot, 500)
 var tickerTape = make(chan float64, 1000)
+
+// Store is the global financial-data store (TimescaleDB + Redis)
+var store *storage.Store
 
 // --------------------
 // Routes
 // --------------------
+
 func pingHandler(w http.ResponseWriter, r *http.Request) {
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("pong", nil))
 }
@@ -40,23 +46,24 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("healthy", time.Now()))
 }
 
-// handleOrder receives JSON from the user and pushes it into the Engine
 func handleOrder(w http.ResponseWriter, r *http.Request) {
 	var req models.Order
 
-	// Parse the JSON body into our Order struct
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid JSON", err))
 		return
 	}
 
-	// Validate basic fields
 	if req.ID == "" || req.Quantity <= 0 {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID, Symbol, or Quantity", nil))
+		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID or invalid Quantity", nil))
 		return
 	}
 
-	// Push the order into the channel to be processed by the Engine
+	// Persist order to Redis before sending to engine
+	if store != nil {
+		store.InsertOrder(req)
+	}
+
 	orderStream <- req
 
 	response.WriteJson(w, http.StatusAccepted, map[string]interface{}{
@@ -71,55 +78,71 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 // --------------------
 // Main
 // --------------------
+
 func main() {
 	log.Println("=====================================================")
 	log.Println("🚀 STARTING ALGORITHMIC TRADING SIMULATOR")
 	log.Println("=====================================================")
 
-	// 1. Load Configuration and Initialize Database
+	// 1. Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
 	}
 
+	// 2. Init databases (Postgres, TimescaleDB, Redis)
 	dbConnections, err := database.Init(cfg)
 	if err != nil {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections)
+	// 3. Schema migration BEFORE creating the Store — tables must exist first.
+	//    From File 2: correct order. File 1 had NewStore before InitSchema which
+	//    meant the store could be used against a database with no tables.
+
+	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
+
+	if err := store.ResetDatabase(); err != nil {
+		log.Fatalf("Database reset failed: %v", err)
+	}
+
+	if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
+		log.Fatal("Failed to init storage schema:", err)
+	}
+
+	apphandlers := handlers.New(dbConnections, orderStream,store)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
 
-	// 2. Start the Matching Engine
-	engine := matching.NewEngine(orderStream, tradeStream)
+	// 4. Start matching engine
+	engine := matching.NewEngine(orderStream, tradeStream, lobStream)
 	go engine.Start()
 
-	// 3. Start the Trade Consumer (The Ticker Tape Broadcaster)
-	// 3. Start the Trade Consumer
+	// 5. LOB snapshot pipeline — storage owns lobStream only
+	store.StartPipeline(lobStream)
+
+	// 6. Single trade consumer — owns tradeStream exclusively.
+	//    From File 2: calls store.HandleTrade for real persistence.
+	//    File 1's fake OrderbookUpdate payload is removed — the real LOB
+	//    snapshot is already published by storage.handleLOBSnapshot via lobStream.
 	go func() {
 		for trade := range tradeStream {
-			log.Printf("✅ [TRADE EXECUTED] Match ID: %s & %s | %d shares of %s @ ₹%.2f",
-				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
+			// log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
+				// trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
 
-			// --- NEW: PUBLISH THE TRADE TO REDIS ---
-			// We format a fake orderbook payload just for testing the pipe
-			priceStr := strconv.FormatFloat(trade.Price, 'f', 2, 64)
-			qtyStr := strconv.FormatInt(trade.Quantity, 10)
-			
-			fakeUpdate := models.OrderbookUpdate{
-				Symbol: trade.Symbol,
-				Bids: [][]string{{priceStr, qtyStr}},
-				Asks: [][]string{},
-			}
-			
-			payload, _ := json.Marshal(fakeUpdate)
-			
-			// Publish to the channel the WebSocket is listening to
-			dbConnections.Redis.Publish(context.Background(), "orderbook:"+trade.Symbol, payload)
-			// ---------------------------------------
+			// Persist trade to TimescaleDB + update Redis candle + ring buffer
+			store.HandleTrade(trade)
 
+			// Publish real-time trade event for WebSocket subscribers
+			payload, _ := json.Marshal(trade)
+			dbConnections.Redis.Publish(
+				context.Background(),
+				"trades:"+trade.Symbol,
+				payload,
+			)
+
+			// Feed tickerTape for noise trader (non-blocking)
 			select {
 			case tickerTape <- trade.Price:
 			default:
@@ -127,37 +150,71 @@ func main() {
 		}
 	}()
 
-	// 4. Start the GBM Market Manager (Physics Engine)
+	// 7. GBM Market Manager — multi-asset from assets.json (File 1)
 	marketManager := gbm.NewMarketManager()
-	symbol := "TECH"
-	marketManager.AddAsset(symbol, "BLUE_CHIP", 100.00)
 
-	time.Sleep(50 * time.Millisecond) // Let engine bootstrap
+	assetFile, err := os.ReadFile("internal/config/assets.json")
+	if err != nil {
+		log.Fatal("❌ Failed to read assets.json: ", err)
+	}
 
-	// 5. Start the Synthetic Market Maker (Liquidity Provider)
+	var configuredAssets []struct {
+		Symbol     string  `json:"symbol"`
+		Class      string  `json:"class"`
+		StartPrice float64 `json:"start_price"`
+	}
+	if err := json.Unmarshal(assetFile, &configuredAssets); err != nil {
+		log.Fatal("❌ Failed to parse assets.json: ", err)
+	}
+
+	var activeSymbols []string
+	ctxBackground := context.Background()
+
+	for _, a := range configuredAssets {
+		// Add to simulation engine
+		marketManager.AddAsset(a.Symbol, a.Class, a.StartPrice)
+		activeSymbols = append(activeSymbols, a.Symbol)
+
+		// Seed asset metadata into Redis for API handlers
+		assetMetadata := map[string]interface{}{
+			"ticker":      a.Symbol,
+			"class":       a.Class,
+			"start_price": a.StartPrice,
+			"status":      "active",
+		}
+		metaJSON, _ := json.Marshal(assetMetadata)
+		dbConnections.Redis.HSet(ctxBackground, "market:assets", a.Symbol, metaJSON)
+		// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	// 8. Synthetic Market Maker — uses activeSymbols
 	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
-	go marketMaker.Start([]string{symbol}, 100*time.Millisecond)
+	go marketMaker.Start(activeSymbols, 100*time.Millisecond)
 
-	// 6. Start the Noise Trader (Retail/Whale Flow)
+	// 9. Noise Trader — uses activeSymbols
 	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
-	go noiseTrader.Start([]string{symbol}, 8*time.Hour)
+	go noiseTrader.Start(activeSymbols, 8*time.Hour)
 
-	// 7. Watch the Fair Value drift (Diagnostics)
+	// 10. GBM fair value diagnostics — 2s interval, all symbols (File 1)
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			price := marketManager.GetPrice(symbol)
-			log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", symbol, price)
+			for _, sym := range activeSymbols {
+				price := marketManager.GetPrice(sym)
+				log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
+			}
 		}
 	}()
 
-	// 8. Register HTTP/WS Routes
+	// 11. Register routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
 	r.Post("/order", handleOrder)
 
-	// 9. Configure and Start HTTP Server
+	// 12. HTTP server
 	address := ":" + strconv.Itoa(cfg.Server.Port)
 	server := &http.Server{
 		Addr:         address,
@@ -167,7 +224,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 10. Handle Graceful Shutdown
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
@@ -179,15 +235,15 @@ func main() {
 	}()
 
 	<-done
-
 	log.Println("\n--- INITIATING SHUTDOWN ---")
 
-	// Shut down simulation components
-	marketManager.RemoveAsset(symbol)
+	// Shutdown all active symbols (File 1 — handles multi-asset)
+	for _, sym := range activeSymbols {
+		marketManager.RemoveAsset(sym)
+	}
 	time.Sleep(200 * time.Millisecond)
 	log.Println("Exchange offline.")
 
-	// Shut down API Server
 	slog.Info("Shutting down API server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -195,6 +251,5 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		slog.Error("Server shutdown error:", slog.String("error", err.Error()))
 	}
-
 	slog.Info("Server stopped gracefully. Goodbye!")
 }

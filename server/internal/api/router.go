@@ -32,13 +32,14 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 			r.Get("/assets", h.GetAssets)
 			r.Get("/marketdata/{symbol}", h.GetMarketData)
 			r.Get("/candles/{symbol}/{interval}", h.GetMarketCandles)
-			r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
+			// r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
 		})
 
 		// Protected Routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.JWTMiddleware) // Apply JWT Auth Middleware
 
+			// order Routes
 			r.Route("/orders", func(r chi.Router) {
 				r.Post("/", h.PlaceOrder)
 				r.Delete("/{id}", h.CancelOrder)

@@ -8,6 +8,7 @@
     --trading-bg: #f5f5f5;
     --trading-panel: #ffffff;
     --trading-border: #e0e0e0;
+    --trading-border-subtle: #f0f0f0;
     --trading-green: #16a34a;
     --trading-red: #dc2626;
     --trading-text: #111111;
@@ -23,6 +24,7 @@
     --trading-bg: #000000;
     --trading-panel: #111111;
     --trading-border: #1E1E1E;
+    --trading-border-subtle: #181818;
     --trading-green: #22c55e;
     --trading-red: #ef4444;
     --trading-text: #ffffff;
@@ -44,6 +46,8 @@
 .bg-down { background-color: var(--trading-red); }
 .text-main { color: var(--trading-text); }
 .text-muted { color: var(--trading-text-muted); }
+.border-subtle { border-color: var(--trading-border-subtle); }
+.divide-subtle > :not([hidden]) ~ :not([hidden]) { border-color: var(--trading-border-subtle); }
 
 @layer utilities {
   .glass-panel {

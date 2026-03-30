@@ -217,10 +217,7 @@ export function TradePage({ darkMode }: TradePageProps) {
             className="pb-[2px] shrink-0"
           >
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
-              <div className="px-3 py-2 border-b border-main font-semibold text-sm">Place Order</div>
-              <div className="flex-1 p-3 flex flex-col overflow-y-auto no-scrollbar">
-                <OrderForm compact={orderFormHeight < 60} />
-              </div>
+              <OrderForm />
             </div>
           </div>
 
@@ -234,10 +231,7 @@ export function TradePage({ darkMode }: TradePageProps) {
 
           <div className="flex-1 min-h-0 pt-[2px]">
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
-              <div className="px-3 py-2 border-b border-main font-semibold text-sm">Balances & Portfolio</div>
-              <div className="flex-1 p-2 flex flex-col overflow-y-auto no-scrollbar">
-                <Balances />
-              </div>
+              <Balances />
             </div>
           </div>
         </div>

@@ -48,112 +48,120 @@ export function HistoryPage() {
   const losses = filteredTrades.filter(t => t.pnl < 0).length;
 
   return (
-    <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none p-0 font-sans focus:outline-none focus:ring-0">
-      {/* Summary Cards Row with spacing */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0 p-4 pb-0">
-        <div className="glass-panel rounded-xl p-5 shadow-lg border border-main">
-          <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-2 flex items-center gap-1.5"><ArrowUpRight size={14}/> Total P&L</div>
-          <div className={`text-2xl font-bold font-mono ${totalPnL >= 0 ? 'text-up' : 'text-down'}`}>
-            {totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}
+    <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none font-sans">
+      {/* Summary Cards Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 shrink-0 pb-[2px]">
+        <div className="pr-0.5">
+          <div className="glass-panel rounded-lg p-3 h-full">
+            <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1"><ArrowUpRight size={12}/> Total P&L</div>
+            <div className={`text-xl font-bold font-mono ${totalPnL >= 0 ? 'text-up' : 'text-down'}`}>
+              {totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}
+            </div>
           </div>
         </div>
-        <div className="glass-panel rounded-xl p-5 shadow-lg border border-main">
-          <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-2 flex items-center gap-1.5"><Filter size={14}/> Winning Trades</div>
-          <div className="text-2xl font-bold text-up font-mono">{wins}</div>
+        <div className="px-0.5">
+          <div className="glass-panel rounded-lg p-3 h-full">
+            <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1"><Filter size={12}/> Winning Trades</div>
+            <div className="text-xl font-bold text-up font-mono">{wins}</div>
+          </div>
         </div>
-        <div className="glass-panel rounded-xl p-5 shadow-lg border border-main">
-          <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-2 flex items-center gap-1.5"><ArrowDownRight size={14}/> Losing Trades</div>
-          <div className="text-2xl font-bold text-down font-mono">{losses}</div>
+        <div className="pl-0.5">
+          <div className="glass-panel rounded-lg p-3 h-full">
+            <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1"><ArrowDownRight size={12}/> Losing Trades</div>
+            <div className="text-xl font-bold text-down font-mono">{losses}</div>
+          </div>
         </div>
       </div>
 
-      {/* Trade History Table: Flush Panel like TradePage */}
-      <div className="flex-1 glass-panel rounded-none flex flex-col overflow-hidden shadow-none border-none border-t border-main mt-4">
-        <div className="px-5 py-4 border-b border-main flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-panel">
-          <span className="font-semibold text-lg font-display">Trade History ({filteredTrades.length} trades)</span>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center bg-panel/50 rounded-lg px-3 py-2 border border-main gap-2 flex-1 sm:flex-none focus-within:border-white transition-colors">
-              <Search size={14} className="text-muted" />
-              <input
-                type="text"
-                placeholder="Search symbol..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="bg-transparent text-main text-sm outline-none w-full sm:w-32 placeholder:text-muted"
-              />
+      {/* Trade History Table */}
+      <div className="flex-1 pt-1">
+        <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full">
+          <div className="px-3 py-2 border-b border-main flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+            <span className="font-semibold text-sm">Trade History ({filteredTrades.length} trades)</span>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
+              <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
+                <Search size={12} className="text-muted" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-main text-sm outline-none w-full sm:w-20 placeholder:text-muted"
+                />
+              </div>
+              <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
+                <Calendar size={12} className="text-muted" />
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value)}
+                  className="bg-transparent text-main text-sm outline-none w-full sm:w-auto placeholder:text-muted cursor-pointer"
+                />
+              </div>
+              <div className="flex gap-1">
+                {(['all', 'buys', 'sells'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`text-xs uppercase font-bold px-2 py-1 rounded transition-all ${
+                      filter === f ? 'bg-panel border border-white/20 text-main' : 'text-muted hover:text-main hover:bg-panel'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 bg-main/50 hover:bg-panel border border-main hover:border-white/30 transition-colors px-2 py-1 rounded text-sm font-bold text-main"
+              >
+                <Download size={12} /> CSV
+              </button>
             </div>
-            <div className="flex items-center bg-panel/50 rounded-lg px-3 py-2 border border-main gap-2 flex-1 sm:flex-none focus-within:border-white transition-colors">
-              <Calendar size={14} className="text-muted" />
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                className="bg-transparent text-main text-sm outline-none w-full sm:w-auto placeholder:text-muted cursor-pointer"
-              />
-            </div>
-            <div className="flex gap-2 bg-main p-1 rounded-lg border border-main">
-              {(['all', 'buys', 'sells'] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`text-xs uppercase font-bold px-4 py-1.5 rounded-md transition-all ${
-                    filter === f ? 'bg-panel shadow text-main' : 'text-muted hover:text-main'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-            <button 
-              onClick={handleExport}
-              className="flex items-center gap-2 bg-main hover:bg-panel border border-main hover:border-white/50 transition-colors px-4 py-2 rounded-lg text-sm font-bold text-main"
-            >
-              <Download size={14} /> Output CSV
-            </button>
           </div>
-        </div>
 
-        <div className="flex-1 overflow-auto no-scrollbar">
-          <table className="w-full text-left text-sm">
-            <thead className="sticky top-0 bg-panel z-10">
-              <tr className="text-muted border-b border-main/50 text-xs uppercase tracking-wider bg-panel/80 backdrop-blur-sm">
-                <th className="pb-3 pt-4 px-5 font-medium">Date</th>
-                <th className="pb-3 pt-4 px-4 font-medium">Symbol</th>
-                <th className="pb-3 pt-4 px-4 font-medium">Side</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right">Price</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right hidden sm:table-cell">Quantity</th>
-                <th className="pb-3 pt-4 px-4 font-medium text-right hidden md:table-cell">Total</th>
-                <th className="pb-3 pt-4 px-5 font-medium text-right">P&L</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-main/50">
-              {filteredTrades.map(trade => (
-                <tr key={trade.id} className="hover:bg-main/30 transition-colors group">
-                  <td className="py-4 px-5 text-muted">
-                    <div className="text-sm font-medium">{trade.date}</div>
-                    <div className="text-xs text-muted/70 font-mono mt-0.5">{trade.time}</div>
-                  </td>
-                  <td className="py-4 px-4 font-bold text-main text-base">{trade.symbol}</td>
-                  <td className="py-4 px-4">
-                    <div className={`flex items-center gap-1.5 font-bold px-2 py-1 rounded-md w-fit ${trade.side === 'Buy' ? 'text-up bg-up/10' : 'text-down bg-down/10'}`}>
-                      {trade.side === 'Buy' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                      {trade.side}
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 font-mono text-right text-main font-semibold text-base">
-                    ${trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="py-4 px-4 font-mono text-right text-muted hidden sm:table-cell text-sm">{trade.quantity}</td>
-                  <td className="py-4 px-4 font-mono text-right text-muted hidden md:table-cell text-sm">
-                    ${trade.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </td>
-                  <td className={`py-4 px-5 font-mono text-right font-bold text-base ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                    {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
-                  </td>
+          <div className="flex-1 overflow-auto no-scrollbar">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-panel z-10">
+                <tr className="text-muted border-b border-subtle text-[10px] uppercase tracking-wider">
+                  <th className="pb-2 pt-2 px-3 font-medium">Date</th>
+                  <th className="pb-2 pt-2 px-2 font-medium">Symbol</th>
+                  <th className="pb-2 pt-2 px-2 font-medium">Side</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right">Price</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right hidden sm:table-cell">Qty</th>
+                  <th className="pb-2 pt-2 px-2 font-medium text-right hidden md:table-cell">Total</th>
+                  <th className="pb-2 pt-2 px-3 font-medium text-right">P&L</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-subtle">
+                {filteredTrades.map(trade => (
+                  <tr key={trade.id} className="hover:bg-main/30 transition-colors group">
+                    <td className="py-2 px-3 text-muted">
+                      <div className="text-sm font-medium">{trade.date}</div>
+                      <div className="text-[10px] text-muted/70 font-mono">{trade.time}</div>
+                    </td>
+                    <td className="py-2 px-2 font-bold text-main text-sm">{trade.symbol}</td>
+                    <td className="py-2 px-2">
+                      <div className={`flex items-center gap-1 font-bold px-1.5 py-0.5 rounded w-fit text-[10px] ${trade.side === 'Buy' ? 'text-up bg-up/10' : 'text-down bg-down/10'}`}>
+                        {trade.side === 'Buy' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                        {trade.side}
+                      </div>
+                    </td>
+                    <td className="py-2 px-2 font-mono text-right text-main font-semibold text-sm">
+                      ${trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-2 px-2 font-mono text-right text-muted hidden sm:table-cell text-sm">{trade.quantity}</td>
+                    <td className="py-2 px-2 font-mono text-right text-muted hidden md:table-cell text-sm">
+                      ${trade.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
+                    <td className={`py-2 px-3 font-mono text-right font-bold text-sm ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
+                      {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
