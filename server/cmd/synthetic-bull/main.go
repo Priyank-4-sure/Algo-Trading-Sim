@@ -130,8 +130,8 @@ func main() {
 	//    snapshot is already published by storage.handleLOBSnapshot via lobStream.
 	go func() {
 		for trade := range tradeStream {
-			// log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
-				// trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
+			log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
+				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
 
 			// Persist trade to TimescaleDB + update Redis candle + ring buffer
 			store.HandleTrade(trade)
@@ -204,10 +204,10 @@ func main() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			for _, sym := range activeSymbols {
-				price := marketManager.GetPrice(sym)
-				log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
-			}
+			// for _, sym := range activeSymbols {
+			// 	price := marketManager.GetPrice(sym)
+			// 	log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
+			// }
 		}
 	}()
 

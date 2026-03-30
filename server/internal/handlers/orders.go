@@ -73,6 +73,16 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 			response.WriteJson(w, http.StatusBadRequest, response.GeneralError("insufficient balance", nil))
 			return
 		}
+
+		// We use gorm.Expr to prevent race conditions during concurrent requests.
+		err := h.DB.Primary.Model(&portfolio).
+			Where("balance >= ?", requiredCash). // Extra safety check at DB level
+			UpdateColumn("balance", gorm.Expr("balance - ?", requiredCash)).Error
+
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to deduct balance", err))
+			return
+		}
 	}
 
 	if req.Side == string(models.Sell) {
