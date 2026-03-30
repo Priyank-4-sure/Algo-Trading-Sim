@@ -145,6 +145,8 @@ func (e *Engine) match(taker models.Order, side *OrderSide) int64 {
 				Symbol:       taker.Symbol,
 				MakerOrderID: maker.ID,
 				TakerOrderID: taker.ID,
+				MakerUserID:  maker.UserID,
+				TakerUserID:  taker.UserID,
 				Price:        bestPrice,
 				Quantity:     tradeQty,
 				Timestamp:    time.Now().UnixNano(),
