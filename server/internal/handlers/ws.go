@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -75,6 +76,12 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				go h.streamLobSnapshot(ctx, c, msg.Topic) // Run in a background thread
 			case len(msg.Topic) > 7 && msg.Topic[:7] == "candles":
 				go h.streamCandles(ctx, c, msg.Topic)
+			case len(msg.Topic) > 9 && msg.Topic[:9] == "portfolio":
+				if userID == 0 {
+					slog.Warn("Unauthenticated client tried to subscribe to portfolio data")
+					continue
+				}
+				go h.streamPortFolioData(ctx, c, msg.Topic, userID)
 			default:
 				slog.Error("Unknown topic requested", "topic", msg.Topic)
 			}
@@ -178,4 +185,84 @@ func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic st
 			}
 		}
 	}
+}
+
+func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, topic string, userID uint) {
+	// get User Porfolio from Postgres
+	portfolio, err := h.GetPortfolio(fmt.Sprintf("%d", userID))
+
+	if err != nil {
+		slog.Error("Failed to get portfolio for user", "userID", userID, "error", err)
+		return
+	}
+
+	// send inital Holdings and Portfolio Data and holdings current price from candlestickDB
+	currentPrices := make(map[string]any)
+
+	for _, holding := range portfolio.Holdings {
+		// get current price from timescaleDB
+		price, error := h.Store.GetCurrentPrice(holding.Symbol)
+		if error != nil {
+			slog.Error("Failed to get current price for symbol", "symbol", holding.Symbol, "error", error)
+			continue
+		}
+		currentPrices[holding.Symbol] = price
+	}
+
+	response := models.ServerMessage{
+		Topic: topic,
+		Data: map[string]any{
+			"portfolio":     portfolio,
+			"currentPrices": currentPrices,
+		},
+	}
+
+	if err := wsjson.Write(ctx, c, response); err != nil {
+		slog.Error("Failed to write portfolio data to websocket", "userID", userID, "error", err)
+		return
+	}
+
+	// subscribe to Redis channel for candlestick updates for the symbols in the user's holdings
+	for _, holding := range portfolio.Holdings {
+		candleTopic := "candles:" + holding.Symbol
+		go func(symbol string) {
+			pubsub := h.DB.Redis.Subscribe(ctx, candleTopic)
+			defer pubsub.Close()
+			ch := pubsub.Channel()
+
+			log.Printf("📡 Subscribed to Redis channel: %s for user %d", candleTopic, userID)
+
+			for {
+				select {
+				case <-ctx.Done():
+					log.Printf("🛑 Client disconnected from %s", candleTopic)
+					return
+				case msg := <-ch:
+					fmt.Printf("Received message on %s for user %d: %s\n", candleTopic, userID, msg.Payload)
+					price, err := h.Store.GetCurrentPrice(symbol)
+					if err != nil {
+						slog.Error("Failed to get current price for symbol", "symbol", symbol, "error", err)
+						continue
+					}
+
+					currentPrices[symbol] = price
+
+					response := models.ServerMessage{
+						Topic: topic,
+						Data: map[string]any{
+							"portfolio":     portfolio,
+							"currentPrices": currentPrices,
+						},
+					}
+
+					if err := wsjson.Write(ctx, c, response); err != nil {
+						log.Printf("Failed to write portfolio update to websocket for user %d: %v", userID, err)
+						return
+					}
+
+				}
+			}
+		}(candleTopic)
+	}
+
 }

@@ -28,6 +28,7 @@ import (
 // Global channels
 var orderStream = make(chan models.Order, 10000)
 var tradeStream = make(chan models.TradeMessage, 10000)
+var eventStream = make(chan models.MarketEvent, 10000)
 var lobStream = make(chan models.LOBSnapshot, 500)
 var tickerTape = make(chan float64, 1000)
 
@@ -99,30 +100,31 @@ func main() {
 	// 3. Schema migration BEFORE creating the Store — tables must exist first.
 	//    From File 2: correct order. File 1 had NewStore before InitSchema which
 	//    meant the store could be used against a database with no tables.
-
 	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
-
 	if err := store.ResetDatabase(); err != nil {
 		log.Fatalf("Database reset failed: %v", err)
 	}
-
 	if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
 		log.Fatal("Failed to init storage schema:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections, orderStream,store)
+	apphandlers := handlers.New(dbConnections, orderStream, store)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
 
-	// 4. Start matching engine
-	engine := matching.NewEngine(orderStream, tradeStream, lobStream)
+	// 4. Start Market Data Service (Shadow Book)
+	mds := matching.NewMarketDataService(eventStream, lobStream)
+	go mds.Start()
+
+	// 5. Start matching engine
+	engine := matching.NewEngine(orderStream, tradeStream, eventStream)
 	go engine.Start()
 
-	// 5. LOB snapshot pipeline — storage owns lobStream only
+	// 6. LOB snapshot pipeline (Storage still consumes from LOBStream)
 	store.StartPipeline(lobStream)
 
-	// 6. Single trade consumer — owns tradeStream exclusively.
+	// 7. Single trade consumer — owns tradeStream exclusively.
 	//    From File 2: calls store.HandleTrade for real persistence.
 	//    File 1's fake OrderbookUpdate payload is removed — the real LOB
 	//    snapshot is already published by storage.handleLOBSnapshot via lobStream.
@@ -150,7 +152,7 @@ func main() {
 		}
 	}()
 
-	// 7. GBM Market Manager — multi-asset from assets.json (File 1)
+	// 8. GBM Market Manager — multi-asset from assets.json (File 1)
 	marketManager := gbm.NewMarketManager()
 
 	assetFile, err := os.ReadFile("internal/config/assets.json")
@@ -189,15 +191,15 @@ func main() {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// 8. Synthetic Market Maker — uses activeSymbols
+	// 9. Synthetic Market Maker — uses activeSymbols
 	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
 	go marketMaker.Start(activeSymbols, 100*time.Millisecond)
 
-	// 9. Noise Trader — uses activeSymbols
+	// 10. Noise Trader — uses activeSymbols
 	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
 	go noiseTrader.Start(activeSymbols, 8*time.Hour)
 
-	// 10. GBM fair value diagnostics — 2s interval, all symbols (File 1)
+	// 11. GBM fair value diagnostics — 2s interval, all symbols (File 1)
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
@@ -209,12 +211,12 @@ func main() {
 		}
 	}()
 
-	// 11. Register routes
+	// 12. Register routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
 	r.Post("/order", handleOrder)
 
-	// 12. HTTP server
+	// 13. HTTP server
 	address := ":" + strconv.Itoa(cfg.Server.Port)
 	server := &http.Server{
 		Addr:         address,

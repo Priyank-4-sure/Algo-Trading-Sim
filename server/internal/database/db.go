@@ -31,7 +31,7 @@ func Init(cfg *config.AppConfig) (*Connections, error) {
 	log.Println("✅ Primary Database connected!")
 
 	// 1.1 Run Migrations
-	if err := primaryDB.AutoMigrate(&models.User{}); err != nil {
+	if err := primaryDB.AutoMigrate(&models.User{}, &models.Portfolio{}, &models.Holding{}); err != nil {
 		return nil, fmt.Errorf("failed to migrate primary DB: %w", err)
 	}
 	log.Println("✅ Primary Database migrated!")

@@ -11,7 +11,7 @@ import (
 type Handler struct {
 	DB          *database.Connections
 	OrderStream chan<- models.Order
-	store       *storage.Store
+	Store       *storage.Store
 }
 
 // New creates a new Handler instance with the injected databases
@@ -19,6 +19,6 @@ func New(db *database.Connections, orderStream chan<- models.Order, store *stora
 	return &Handler{
 		DB:          db,
 		OrderStream: orderStream,
-		store:       store,
+		Store:       store,
 	}
 }

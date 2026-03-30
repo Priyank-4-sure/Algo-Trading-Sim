@@ -11,25 +11,16 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
 )
 
-func (h *Handler) GetPortfolio(w http.ResponseWriter, r *http.Request) {
-
-	ctxValue := r.Context().Value(middleware.UserIDKey)
-
-	userID, ok := ctxValue.(uint)
-
-	if !ok {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid user ID in context", nil))
-		return
-	}
-
+func (h *Handler) GetPortfolio(userID string) (models.Portfolio, error) {
+	
 	var portfolio models.Portfolio
 	result := h.DB.Primary.Preload("Holdings").First(&portfolio, "user_id = ?", userID)
 
 	if result.Error != nil {
-		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve portfolio", result.Error))
-		return
+		return portfolio, result.Error
 	}
-	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("Portfolio retrieved successfully", portfolio))
+	
+	return portfolio, nil
 }
 
 func (h *Handler) GetPortfolioHistory(w http.ResponseWriter, r *http.Request) {
@@ -83,20 +74,20 @@ func (h *Handler) GetPortfolioHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ==========================================
-	// PART 2: Fetch Holdings from Postgres
+	// PART 2: Fetch Holdings via Portfolio from Postgres
 	// ==========================================
-	var holdings []models.Holding
-	if err := h.DB.Primary.Where("user_id = ?", userID).Find(&holdings).Error; err != nil {
-		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve holdings", err))
+	var portfolio models.Portfolio
+	if err := h.DB.Primary.Preload("Holdings").Where("user_id = ?", userID).First(&portfolio).Error; err != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve portfolio", err))
 		return
 	}
+	holdings := portfolio.Holdings
 
 	// ==========================================
-	// PART 3: Fetch Trades from Postgres
+	// PART 3: Fetch Trades from TimescaleDB
 	// ==========================================
-	var trades []models.TradeMessage
-	// Use explicit OR syntax to check if they were the Maker OR the Taker
-	if err := h.DB.Primary.Where("maker_user_id = ? OR taker_user_id = ?", userID, userID).Find(&trades).Error; err != nil {
+	trades, err := h.Store.GetTradesByUserID(userID)
+	if err != nil {
 		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve trades", err))
 		return
 	}
@@ -125,23 +116,23 @@ func (h *Handler) ResetPortfolio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// clear User Holdings
+	// Fetch portfolio first to get the portfolio ID
+	var portfolio models.Portfolio
+	result := h.DB.Primary.Where("user_id = ?", userID).First(&portfolio)
+	if result.Error != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to reset portfolio", result.Error))
+		return
+	}
 
+	// Clear holdings by portfolio_id (Holding has PortfolioID, not UserID)
 	var Holdings []models.Holding
-	result := h.DB.Primary.Where("user_id = ?", userID).Delete(&Holdings)
+	result = h.DB.Primary.Where("portfolio_id = ?", portfolio.ID).Delete(&Holdings)
 	if result.Error != nil {
 		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to reset portfolio", result.Error))
 		return
 	}
 
 	// Reset User Balance
-	var portfolio models.Portfolio
-	result = h.DB.Primary.Where("user_id = ?", userID).First(&portfolio)
-	if result.Error != nil {
-		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to reset portfolio", result.Error))
-		return
-	}
-
 	portfolio.Balance = 100000.00 // Reset to initial balance
 	result = h.DB.Primary.Save(&portfolio)
 
@@ -152,4 +143,17 @@ func (h *Handler) ResetPortfolio(w http.ResponseWriter, r *http.Request) {
 
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("Portfolio reset successfully", nil))
 
+}
+
+// CreatePortfolio creates a new portfolio entry for a user with an initial balance.
+// This is called during user registration to ensure every user starts with a portfolio.
+func (h *Handler) CreatePortfolio(userID uint) error {
+	portfolio := models.Portfolio{
+		UserID:  userID,
+		Balance: 100000.00, // Initial balance
+	}
+	if err := h.DB.Primary.Create(&portfolio).Error; err != nil {
+		return fmt.Errorf("failed to create portfolio for user %d: %w", userID, err)
+	}
+	return nil
 }

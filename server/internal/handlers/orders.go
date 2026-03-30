@@ -118,7 +118,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case h.OrderStream <- order:
-		h.store.InsertOrder(order)
+		h.Store.InsertOrder(order)
 		response.WriteJson(w, http.StatusAccepted, response.GeneralSuccess("order queued", map[string]string{"order_id": order.ID}))
 	default:
 		response.WriteJson(w, http.StatusServiceUnavailable, response.GeneralError("engine busy", nil))

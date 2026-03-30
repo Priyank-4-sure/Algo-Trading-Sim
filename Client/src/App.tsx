@@ -13,15 +13,17 @@ import { MarketsPage } from './components/pages/MarketsPage';
 import { PortfolioPage } from './components/pages/PortfolioPage';
 import { AnalyticsPage } from './components/pages/AnalyticsPage';
 import { HistoryPage } from './components/pages/HistoryPage';
-// Removed the .tsx extension here for cleaner imports
 import { LandingPage } from './components/pages/LandingPage'; 
 import { LoginPage } from './components/pages/LoginPage';
 import { SignUpPage } from './components/pages/SignUpPage';
 import { WatchlistPage } from './components/pages/WatchlistPage';
+import { useAuth } from './hooks/useAuth';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Using the real auth hook from the develop branch
+  const { isAuthenticated, loading, logout } = useAuth();
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
 
@@ -29,6 +31,16 @@ export default function App() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  // The loading spinner from the develop branch
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // The stable BrowserRouter structure from your branch
   return (
     <BrowserRouter>
       <Routes>
@@ -37,13 +49,23 @@ export default function App() {
           path="/" 
           element={<LandingPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />} 
         />
+        
+        {/* Smart Auth Routes - Redirects to app if they are already logged in! */}
         <Route 
           path="/login" 
-          element={<LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogin={() => setIsAuthenticated(true)} />} 
+          element={!isAuthenticated ? (
+            <LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+          ) : (
+            <Navigate to="/app/trade" replace />
+          )} 
         />
         <Route 
           path="/signup" 
-          element={<SignUpPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} onSignUp={() => setIsAuthenticated(true)} />} 
+          element={!isAuthenticated ? (
+            <SignUpPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+          ) : (
+            <Navigate to="/app/trade" replace />
+          )} 
         />
 
         {/* Protected Dashboard Routes */}
@@ -51,7 +73,8 @@ export default function App() {
           path="/app" 
           element={
             isAuthenticated ? (
-              <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => setIsAuthenticated(false)}>
+              // Uses the real 'logout' function from useAuth
+              <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={logout}>
                 <Outlet />
               </Layout>
             ) : (
@@ -63,12 +86,12 @@ export default function App() {
           <Route index element={<Navigate to="trade" replace />} />
           
           {/* Child Routes rendered inside Layout's Outlet */}
-          <Route path="trade" element={<TradePage darkMode={darkMode}/>}/>
+          <Route path="trade" element={<TradePage darkMode={darkMode} />} />
           <Route path="markets" element={<MarketsPage />} />
+          <Route path="watchlist" element={<WatchlistPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="portfolio" element={<PortfolioPage />} />
           <Route path="history" element={<HistoryPage />} />
-          <Route path="watchlist" element={<WatchlistPage />}/>
         </Route>
       </Routes>
     </BrowserRouter>
