@@ -509,6 +509,31 @@ func (s *Store) GetMidPrice(symbol string) (string, error) {
 	return s.redis.Get(s.ctx, "midprice:"+symbol).Result()
 }
 
+// GetCurrentPrice queries TimescaleDB for the most recent executed trade price of a symbol.
+func (s *Store) GetCurrentPrice(symbol string) (float64, error) {
+	var price float64
+	
+	err := s.tsdb.Raw(`
+		SELECT price
+		FROM trade_records
+		WHERE symbol = ?
+		ORDER BY executed_at DESC
+		LIMIT 1
+	`, symbol).Scan(&price).Error
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to query current price for %s: %w", symbol, err)
+	}
+
+	// GORM's Scan() into a primitive type won't error out if 0 rows are returned; 
+	// it will just leave the float64 at its zero value (0.0).
+	if price == 0 {
+		return 0, fmt.Errorf("no trades found for symbol: %s", symbol)
+	}
+
+	return price, nil
+}
+
 // GetTradesBySymbol queries trade_records for a given symbol from the Candlestick DB.
 // Used by portfolio history — returns the N most recent trades.
 func (s *Store) GetTradesBySymbol(symbol string, limit int) ([]TradeRecord, error) {

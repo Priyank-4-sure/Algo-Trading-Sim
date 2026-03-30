@@ -51,7 +51,6 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 			r.Get("/trades/history", h.GetTradeHistory)
 
 			r.Route("/portfolio", func(r chi.Router) {
-				r.Get("/", h.GetPortfolio)
 				r.Get("/history", h.GetPortfolioHistory)
 				r.Post("/reset", h.ResetPortfolio)
 			})

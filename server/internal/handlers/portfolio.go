@@ -11,25 +11,16 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
 )
 
-func (h *Handler) GetPortfolio(w http.ResponseWriter, r *http.Request) {
-
-	ctxValue := r.Context().Value(middleware.UserIDKey)
-
-	userID, ok := ctxValue.(uint)
-
-	if !ok {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid user ID in context", nil))
-		return
-	}
-
+func (h *Handler) GetPortfolio(userID string) (models.Portfolio, error) {
+	
 	var portfolio models.Portfolio
 	result := h.DB.Primary.Preload("Holdings").First(&portfolio, "user_id = ?", userID)
 
 	if result.Error != nil {
-		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve portfolio", result.Error))
-		return
+		return portfolio, result.Error
 	}
-	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("Portfolio retrieved successfully", portfolio))
+	
+	return portfolio, nil
 }
 
 func (h *Handler) GetPortfolioHistory(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +86,7 @@ func (h *Handler) GetPortfolioHistory(w http.ResponseWriter, r *http.Request) {
 	// ==========================================
 	// PART 3: Fetch Trades from TimescaleDB
 	// ==========================================
-	trades, err := h.store.GetTradesByUserID(userID)
+	trades, err := h.Store.GetTradesByUserID(userID)
 	if err != nil {
 		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve trades", err))
 		return
