@@ -32,7 +32,13 @@ export function HistoryPage() {
   const [dateFilter, setDateFilter] = useState('');
 
   const filteredTrades = TRADE_HISTORY.filter(t => {
-    if (searchQuery && !t.symbol.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    // Better search: checks symbol, side, or the DD/MM/YYYY formatted date
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const formattedDate = t.date.split('-').reverse().join('/');
+      if (!t.symbol.toLowerCase().includes(q) && !t.side.toLowerCase().includes(q) && !formattedDate.includes(q)) return false;
+    }
+    
     if (filter === 'buys') return t.side === 'Buy';
     if (filter === 'sells') return t.side === 'Sell';
     if (dateFilter && t.date !== dateFilter) return false;
@@ -40,7 +46,14 @@ export function HistoryPage() {
   });
 
   const handleExport = () => {
-    alert('Exporting CSV... (Simulated)');
+    // Minimalist CSV Export
+    const csv = ['Date,Symbol,Side,Price,Qty,Total,P&L']
+      .concat(filteredTrades.map(t => `${t.date.split('-').reverse().join('/')},${t.symbol},${t.side},${t.price},${t.quantity},${t.total},${t.pnl}`))
+      .join('\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    link.download = 'trade_history.csv';
+    link.click();
   };
 
   const totalPnL = filteredTrades.reduce((sum, t) => sum + t.pnl, 0);
@@ -86,7 +99,7 @@ export function HistoryPage() {
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-main text-sm outline-none w-full sm:w-20 placeholder:text-muted"
+                  className="bg-transparent text-main text-sm outline-none w-full sm:w-24 placeholder:text-muted"
                 />
               </div>
               <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
@@ -137,7 +150,8 @@ export function HistoryPage() {
                 {filteredTrades.map(trade => (
                   <tr key={trade.id} className="hover:bg-main/30 transition-colors group">
                     <td className="py-2 px-3 text-muted">
-                      <div className="text-sm font-medium">{trade.date}</div>
+                      {/* Formatted to DD/MM/YYYY inline here */}
+                      <div className="text-sm font-medium">{trade.date.split('-').reverse().join('/')}</div>
                       <div className="text-[10px] text-muted/70 font-mono">{trade.time}</div>
                     </td>
                     <td className="py-2 px-2 font-bold text-main text-sm">{trade.symbol}</td>
