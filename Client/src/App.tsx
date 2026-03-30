@@ -16,16 +16,25 @@ import { HistoryPage } from './components/pages/HistoryPage';
 import { LandingPage } from './components/pages/LandingPage.tsx';
 import { LoginPage } from './components/pages/LoginPage';
 import { SignUpPage } from './components/pages/SignUpPage';
+import { useAuth } from './hooks/useAuth';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, loading, logout } = useAuth();
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   // ─── REACT ROUTER CONFIGURATION ────────────────────────────────
   const router = createBrowserRouter([
@@ -35,17 +44,25 @@ export default function App() {
     },
     {
       path: "/login",
-      element: <LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogin={() => setIsAuthenticated(true)} />
+      element: !isAuthenticated ? (
+        <LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      ) : (
+        <Navigate to="/app/trade" replace />
+      )
     },
     {
       path: "/signup",
-      element: <SignUpPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} onSignUp={() => setIsAuthenticated(true)} />
+      element: !isAuthenticated ? (
+        <SignUpPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      ) : (
+        <Navigate to="/app/trade" replace />
+      )
     },
     {
       // The Dashboard "Shell"
       path: "/app",
       element: isAuthenticated ? (
-        <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => setIsAuthenticated(false)}>
+        <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={logout}>
           {/* The Outlet renders whatever child route is active */}
           <Outlet /> 
         </Layout>

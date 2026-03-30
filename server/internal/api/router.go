@@ -5,11 +5,22 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/handlers"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 // SetupRouter creates the Chi router and maps URLs to the Handlers
 func SetupRouter(h *handlers.Handler) *chi.Mux {
 	r := chi.NewRouter()
+
+	// CORS Middleware
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, 
+	}))
 
 	// Middleware
 	r.Use(chiMiddleware.Logger)
@@ -32,13 +43,14 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 			r.Get("/assets", h.GetAssets)
 			r.Get("/marketdata/{symbol}", h.GetMarketData)
 			r.Get("/candles/{symbol}/{interval}", h.GetMarketCandles)
-			r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
+			// r.Get("/orderbook/{symbol}", h.GetLobSnapshot)
 		})
 
 		// Protected Routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.JWTMiddleware) // Apply JWT Auth Middleware
 
+			// order Routes
 			r.Route("/orders", func(r chi.Router) {
 				r.Post("/", h.PlaceOrder)
 				r.Delete("/{id}", h.CancelOrder)
@@ -50,7 +62,6 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 			r.Get("/trades/history", h.GetTradeHistory)
 
 			r.Route("/portfolio", func(r chi.Router) {
-				r.Get("/", h.GetPortfolio)
 				r.Get("/history", h.GetPortfolioHistory)
 				r.Post("/reset", h.ResetPortfolio)
 			})

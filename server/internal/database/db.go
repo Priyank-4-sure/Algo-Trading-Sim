@@ -6,8 +6,8 @@ import (
 	"log"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
-	"github.com/glebarez/sqlite"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
+	"github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -31,7 +31,7 @@ func Init(cfg *config.AppConfig) (*Connections, error) {
 	log.Println("✅ Primary Database connected!")
 
 	// 1.1 Run Migrations
-	if err := primaryDB.AutoMigrate(&models.User{}); err != nil {
+	if err := primaryDB.AutoMigrate(&models.User{}, &models.Portfolio{}, &models.Holding{}); err != nil {
 		return nil, fmt.Errorf("failed to migrate primary DB: %w", err)
 	}
 	log.Println("✅ Primary Database migrated!")
@@ -74,7 +74,10 @@ func connectSQL(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	// Connect using GORM
 	db, err := gorm.Open(dialector, &gorm.Config{
 		// This prints all SQL queries to your terminal (great for development)
-		Logger: logger.Default.LogMode(logger.Info),
+		// Logger: logger.Default.LogMode(logger.Info),
+
+		// This disables SQL logs 
+		Logger: logger.Default.LogMode(logger.Silent),
 	})
 
 	return db, err

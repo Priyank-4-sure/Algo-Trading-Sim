@@ -2,7 +2,7 @@ package noise
 
 import (
 	"fmt"
-	"log"
+	// "log"
 	"math/rand"
 	"time"
 
@@ -90,7 +90,7 @@ func (a *Agent) Start(symbols []string, sessionDuration time.Duration) {
 			// 5. Fire Order
 			select {
 			case a.orderStream <- order:
-				log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, marketPrice)
+				// log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, marketPrice)
 			default:
 				// Drop if engine is completely backed up
 			}

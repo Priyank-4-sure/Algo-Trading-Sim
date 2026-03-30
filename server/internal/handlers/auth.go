@@ -48,6 +48,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create portfolio for the new user
+	if err := h.CreatePortfolio(user.ID); err != nil {
+		response.WriteJson(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create portfolio"})
+		return
+	}
+
 	// Generate tokens
 	tokens, err := h.generateAuthTokens(user.ID)
 	if err != nil {

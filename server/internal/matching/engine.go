@@ -19,7 +19,7 @@ type Engine struct {
 	OrderIndex  map[string]*OrderNode
 	OrderStream <-chan models.Order
 	TradeStream chan<- models.TradeMessage
-	LOBStream   chan<- models.LOBSnapshot
+	EventStream chan<- models.MarketEvent // Replaced LOBStream with EventStream
 }
 
 // ---- Constructor ----
@@ -27,14 +27,14 @@ type Engine struct {
 func NewEngine(
 	orderStream <-chan models.Order,
 	tradeStream chan<- models.TradeMessage,
-	lobStream chan<- models.LOBSnapshot,
+	eventStream chan<- models.MarketEvent,
 ) *Engine {
 	return &Engine{
 		Books:       make(map[string]*OrderBook),
 		OrderIndex:  make(map[string]*OrderNode),
 		OrderStream: orderStream,
 		TradeStream: tradeStream,
-		LOBStream:   lobStream,
+		EventStream: eventStream,
 	}
 }
 
@@ -63,9 +63,6 @@ func (e *Engine) processOrder(order models.Order) {
 	case models.Cancel:
 		e.cancelOrder(order, book)
 	}
-
-	e.emitLOBSnapshot(order.Symbol, book)
-	e.logOrderBookState(order.Symbol, book)
 }
 
 // ---- Book Management ----
@@ -92,12 +89,16 @@ func (e *Engine) matchLimitOrder(order models.Order, book *OrderBook) {
 		if remaining > 0 {
 			order.Quantity = remaining
 			book.Bids.Add(order, e.OrderIndex)
+			// Emit Event: Volume Added to Bids
+			e.EventStream <- models.MarketEvent{Type: models.EventVolumeAdded, Symbol: order.Symbol, Side: order.Side, Price: order.Price, Quantity: remaining}
 		}
 	case models.Sell:
 		remaining := e.match(order, book.Bids)
 		if remaining > 0 {
 			order.Quantity = remaining
 			book.Asks.Add(order, e.OrderIndex)
+			// Emit Event: Volume Added to Asks
+			e.EventStream <- models.MarketEvent{Type: models.EventVolumeAdded, Symbol: order.Symbol, Side: order.Side, Price: order.Price, Quantity: remaining}
 		}
 	}
 }
@@ -145,10 +146,15 @@ func (e *Engine) match(taker models.Order, side *OrderSide) int64 {
 				Symbol:       taker.Symbol,
 				MakerOrderID: maker.ID,
 				TakerOrderID: taker.ID,
+				MakerUserID:  maker.UserID,
+				TakerUserID:  taker.UserID,
 				Price:        bestPrice,
 				Quantity:     tradeQty,
 				Timestamp:    time.Now().UnixNano(),
 			}
+
+			// Emit Event: Volume Removed from Maker's Side
+			e.EventStream <- models.MarketEvent{Type: models.EventVolumeRemoved, Symbol: taker.Symbol, Side: maker.Side, Price: bestPrice, Quantity: tradeQty}
 
 			log.Printf("[%s] TRADE: %d shares @ ₹%.2f", taker.Symbol, tradeQty, bestPrice)
 
@@ -187,6 +193,9 @@ func (e *Engine) cancelOrder(order models.Order, book *OrderBook) {
 		return
 	}
 
+	// Emit Event: Volume Removed due to Cancel
+	e.EventStream <- models.MarketEvent{Type: models.EventVolumeRemoved, Symbol: order.Symbol, Side: node.Order.Side, Price: node.Order.Price, Quantity: node.Order.Quantity}
+
 	queue.Remove(node)
 	delete(e.OrderIndex, order.ID)
 
@@ -195,78 +204,6 @@ func (e *Engine) cancelOrder(order models.Order, book *OrderBook) {
 	}
 
 	log.Printf("Cancelled Order: %s", order.ID)
-}
-
-// ---- LOB Snapshot ----
-
-// emitLOBSnapshot builds a public depth snapshot and sends it non-blocking
-// to LOBStream → storage.handleLOBSnapshot → Redis orderbook + midprice keys.
-// Uses OrderSide.AllPrices() for O(P) BST traversal and VolumeAt() per level.
-
-func (e *Engine) emitLOBSnapshot(symbol string, book *OrderBook) {
-	bidPrices := book.Bids.AllPrices(false) // descending: best bid first
-	askPrices := book.Asks.AllPrices(true)  // ascending:  best ask first
-
-	bids := make([]models.PriceLevel, 0, len(bidPrices))
-	asks := make([]models.PriceLevel, 0, len(askPrices))
-
-	for _, price := range bidPrices {
-		vol := book.Bids.VolumeAt(price)
-		if vol > 0 {
-			bids = append(bids, models.PriceLevel{
-				Price:    price,
-				Quantity: vol,
-			})
-		}
-	}
-
-	for _, price := range askPrices {
-		vol := book.Asks.VolumeAt(price)
-		if vol > 0 {
-			asks = append(asks, models.PriceLevel{
-				Price:    price,
-				Quantity: vol,
-			})
-		}
-	}
-
-	var midPrice float64
-	if len(bids) > 0 && len(asks) > 0 {
-		midPrice = (bids[0].Price + asks[0].Price) / 2.0
-	}
-
-	select {
-	case e.LOBStream <- models.LOBSnapshot{
-		Symbol:   symbol,
-		Bids:     bids,
-		Asks:     asks,
-		MidPrice: midPrice,
-	}:
-	default:
-		// consumer is slow — drop; next order will emit a fresh snapshot
-	}
-}
-
-// ---- Diagnostics ----
-
-func (e *Engine) logOrderBookState(symbol string, book *OrderBook) {
-	log.Printf("===== LOB STATE: %s =====", symbol)
-
-	// Asks: print highest first (reverse the ascending slice)
-	askPrices := book.Asks.AllPrices(true)
-	for i := len(askPrices) - 1; i >= 0; i-- {
-		price := askPrices[i]
-		log.Printf("  ASK: %d shares @ ₹%.2f", book.Asks.VolumeAt(price), price)
-	}
-
-	log.Printf("  -----------------------")
-
-	// Bids: already descending from AllPrices
-	for _, price := range book.Bids.AllPrices(false) {
-		log.Printf("  BID: %d shares @ ₹%.2f", book.Bids.VolumeAt(price), price)
-	}
-
-	log.Printf("=========================")
 }
 
 // ---- Helpers ----

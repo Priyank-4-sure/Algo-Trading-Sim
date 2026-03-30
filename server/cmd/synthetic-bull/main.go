@@ -23,12 +23,12 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/synthetic"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/storage"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
-	"github.com/coder/websocket"
 )
 
-// Global channels — larger buffers from File 1
+// Global channels
 var orderStream = make(chan models.Order, 10000)
 var tradeStream = make(chan models.TradeMessage, 10000)
+var eventStream = make(chan models.MarketEvent, 10000)
 var lobStream = make(chan models.LOBSnapshot, 500)
 var tickerTape = make(chan float64, 1000)
 
@@ -60,7 +60,7 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Persist order to TimescaleDB before sending to engine
+	// Persist order to Redis before sending to engine
 	if store != nil {
 		store.InsertOrder(req)
 	}
@@ -74,40 +74,6 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 		"status":   "QUEUED",
 		"details":  req,
 	})
-}
-
-// --------------------
-// WebSocket Handler (echo stub — broadcaster comes later)
-// --------------------
-
-func wsHandler(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // DEV ONLY
-	})
-	if err != nil {
-		log.Println("WS accept error:", err)
-		return
-	}
-	defer conn.Close(websocket.StatusInternalError, "internal error")
-
-	ctx := r.Context()
-	log.Println("Client connected")
-
-	for {
-		_, msg, err := conn.Read(ctx)
-		if err != nil {
-			log.Println("Read error:", err)
-			break
-		}
-		log.Printf("Received: %s\n", string(msg))
-		if err := conn.Write(ctx, websocket.MessageText, msg); err != nil {
-			log.Println("Write error:", err)
-			break
-		}
-	}
-
-	conn.Close(websocket.StatusNormalClosure, "bye")
-	log.Println("Client disconnected")
 }
 
 // --------------------
@@ -131,43 +97,46 @@ func main() {
 		log.Fatal("Failed to initialize databases:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections, orderStream)
+	// 3. Schema migration BEFORE creating the Store — tables must exist first.
+	//    From File 2: correct order. File 1 had NewStore before InitSchema which
+	//    meant the store could be used against a database with no tables.
+	store = storage.NewStore(dbConnections.Candlestick, dbConnections.Redis)
+	if err := store.ResetDatabase(); err != nil {
+		log.Fatalf("Database reset failed: %v", err)
+	}
+	if err := storage.InitSchema(dbConnections.Candlestick); err != nil {
+		log.Fatal("Failed to init storage schema:", err)
+	}
+
+	apphandlers := handlers.New(dbConnections, orderStream, store)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
 
-	// 5. Start matching engine (now takes lobStream)
-	engine := matching.NewEngine(orderStream, tradeStream, lobStream)
+	// 4. Start Market Data Service (Shadow Book)
+	mds := matching.NewMarketDataService(eventStream, lobStream)
+	go mds.Start()
+
+	// 5. Start matching engine
+	engine := matching.NewEngine(orderStream, tradeStream, eventStream)
 	go engine.Start()
 
-	// 6. LOB snapshot pipeline — storage owns lobStream only
+	// 6. LOB snapshot pipeline (Storage still consumes from LOBStream)
 	store.StartPipeline(lobStream)
 
-	// 7. Single trade consumer — owns tradeStream exclusively
-	// Does ALL three jobs: persist, Redis publish, tickerTape feed
+	// 7. Single trade consumer — owns tradeStream exclusively.
+	//    From File 2: calls store.HandleTrade for real persistence.
+	//    File 1's fake OrderbookUpdate payload is removed — the real LOB
+	//    snapshot is already published by storage.handleLOBSnapshot via lobStream.
 	go func() {
 		for trade := range tradeStream {
-			log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
-				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
+			// log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
+				// trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
 
-			// --- NEW: PUBLISH THE TRADE TO REDIS ---
-			// We format a fake orderbook payload just for testing the pipe
-			priceStr := strconv.FormatFloat(trade.Price, 'f', 2, 64)
-			qtyStr := strconv.FormatInt(trade.Quantity, 10)
+			// Persist trade to TimescaleDB + update Redis candle + ring buffer
+			store.HandleTrade(trade)
 
-			fakeUpdate := models.OrderbookUpdate{
-				Symbol: trade.Symbol,
-				Bids:   [][]string{{priceStr, qtyStr}},
-				Asks:   [][]string{},
-			}
-
-			payload, _ := json.Marshal(fakeUpdate)
-
-			// Publish to the channel the WebSocket is listening to
-			dbConnections.Redis.Publish(context.Background(), "orderbook:"+trade.Symbol, payload)
-			// ---------------------------------------
-
-			// 7b. Publish real-time trade event to Redis Pub/Sub for WebSocket hub
+			// Publish real-time trade event for WebSocket subscribers
 			payload, _ := json.Marshal(trade)
 			dbConnections.Redis.Publish(
 				context.Background(),
@@ -175,7 +144,7 @@ func main() {
 				payload,
 			)
 
-			// 7c. Feed tickerTape for noise trader (non-blocking)
+			// Feed tickerTape for noise trader (non-blocking)
 			select {
 			case tickerTape <- trade.Price:
 			default:
@@ -183,35 +152,68 @@ func main() {
 		}
 	}()
 
-	// 4. Start the GBM Market Manager (Physics Engine)
+	// 8. GBM Market Manager — multi-asset from assets.json (File 1)
 	marketManager := gbm.NewMarketManager()
-	symbol := "TECH"
-	marketManager.AddAsset(symbol, "BLUE_CHIP", 100.00)
 
-	time.Sleep(50 * time.Millisecond) // let engine bootstrap
+	assetFile, err := os.ReadFile("internal/config/assets.json")
+	if err != nil {
+		log.Fatal("❌ Failed to read assets.json: ", err)
+	}
 
-	// 9. Synthetic Market Maker (liquidity provider)
+	var configuredAssets []struct {
+		Symbol     string  `json:"symbol"`
+		Class      string  `json:"class"`
+		StartPrice float64 `json:"start_price"`
+	}
+	if err := json.Unmarshal(assetFile, &configuredAssets); err != nil {
+		log.Fatal("❌ Failed to parse assets.json: ", err)
+	}
+
+	var activeSymbols []string
+	ctxBackground := context.Background()
+
+	for _, a := range configuredAssets {
+		// Add to simulation engine
+		marketManager.AddAsset(a.Symbol, a.Class, a.StartPrice)
+		activeSymbols = append(activeSymbols, a.Symbol)
+
+		// Seed asset metadata into Redis for API handlers
+		assetMetadata := map[string]interface{}{
+			"ticker":      a.Symbol,
+			"class":       a.Class,
+			"start_price": a.StartPrice,
+			"status":      "active",
+		}
+		metaJSON, _ := json.Marshal(assetMetadata)
+		dbConnections.Redis.HSet(ctxBackground, "market:assets", a.Symbol, metaJSON)
+		// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	// 9. Synthetic Market Maker — uses activeSymbols
 	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
-	go marketMaker.Start([]string{symbol}, 100*time.Millisecond)
+	go marketMaker.Start(activeSymbols, 100*time.Millisecond)
 
-	// 10. Noise Trader (retail/whale flow)
+	// 10. Noise Trader — uses activeSymbols
 	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
-	go noiseTrader.Start([]string{symbol}, 8*time.Hour)
+	go noiseTrader.Start(activeSymbols, 8*time.Hour)
 
-	// 11. GBM fair value diagnostics
+	// 11. GBM fair value diagnostics — 2s interval, all symbols (File 1)
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			price := marketManager.GetPrice(symbol)
-			log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", symbol, price)
+			for _, sym := range activeSymbols {
+				price := marketManager.GetPrice(sym)
+				log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
+			}
 		}
 	}()
 
 	// 12. Register routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
-	r.Get("/ws", wsHandler)
 	r.Post("/order", handleOrder)
 
 	// 13. HTTP server
@@ -237,12 +239,13 @@ func main() {
 	<-done
 	log.Println("\n--- INITIATING SHUTDOWN ---")
 
-	// Stop simulation
-	marketManager.RemoveAsset(symbol)
+	// Shutdown all active symbols (File 1 — handles multi-asset)
+	for _, sym := range activeSymbols {
+		marketManager.RemoveAsset(sym)
+	}
 	time.Sleep(200 * time.Millisecond)
 	log.Println("Exchange offline.")
 
-	// Stop HTTP server
 	slog.Info("Shutting down API server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
