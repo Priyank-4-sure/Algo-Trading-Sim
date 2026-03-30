@@ -72,3 +72,20 @@ type LOBSnapshot struct {
 	Asks     []PriceLevel `json:"asks"` // sorted ascending  (best ask first)
 	MidPrice float64      `json:"mid_price"`
 }
+
+// EventType defines how the Shadow Book should update its volume
+type EventType string
+
+const (
+	EventVolumeAdded   EventType = "VOLUME_ADDED"
+	EventVolumeRemoved EventType = "VOLUME_REMOVED"
+)
+
+// MarketEvent is emitted by the core engine to update the Shadow Book instantly
+type MarketEvent struct {
+	Type     EventType `json:"type"`
+	Symbol   string    `json:"symbol"`
+	Side     Side      `json:"side"`     // The side of the book being modified (Maker's side)
+	Price    float64   `json:"price"`
+	Quantity int64     `json:"quantity"` // Delta quantity (how much added/removed)
+}
