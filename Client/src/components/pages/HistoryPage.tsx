@@ -32,16 +32,26 @@ export function HistoryPage() {
   const [dateFilter, setDateFilter] = useState('');
 
   const filteredTrades = TRADE_HISTORY.filter(t => {
-    // Better search: checks symbol, side, or the DD/MM/YYYY formatted date
+    // 1. Format date to DD/MM/YYYY once for checking
+    const formattedDate = t.date.split('-').reverse().join('/');
+    
+    // 2. Generic Search Check
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const formattedDate = t.date.split('-').reverse().join('/');
-      if (!t.symbol.toLowerCase().includes(q) && !t.side.toLowerCase().includes(q) && !formattedDate.includes(q)) return false;
+      if (!t.symbol.toLowerCase().includes(q) && !t.side.toLowerCase().includes(q)) return false;
     }
     
+    // 3. Smart Date Filter Check
+    // Replaces dashes with slashes so if user types "03-2024" it still works like "03/2024"
+    if (dateFilter) {
+      const safeDateQuery = dateFilter.replace(/-/g, '/');
+      if (!formattedDate.includes(safeDateQuery)) return false;
+    }
+
+    // 4. Buy/Sell Filter Check
     if (filter === 'buys') return t.side === 'Buy';
     if (filter === 'sells') return t.side === 'Sell';
-    if (dateFilter && t.date !== dateFilter) return false;
+    
     return true;
   });
 
@@ -92,25 +102,32 @@ export function HistoryPage() {
           <div className="px-3 py-2 border-b border-main flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
             <span className="font-semibold text-sm">Trade History ({filteredTrades.length} trades)</span>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
+              
+              {/* Asset Search */}
               <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
                 <Search size={12} className="text-muted" />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search asset..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="bg-transparent text-main text-sm outline-none w-full sm:w-24 placeholder:text-muted"
                 />
               </div>
+
+              {/* SMART DATE FILTER */}
               <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
                 <Calendar size={12} className="text-muted" />
                 <input
-                  type="date"
+                  type="text"
+                  placeholder="DD/MM/YYYY, MM/YYYY, or YYYY"
                   value={dateFilter}
                   onChange={e => setDateFilter(e.target.value)}
-                  className="bg-transparent text-main text-sm outline-none w-full sm:w-auto placeholder:text-muted cursor-pointer"
+                  // Note: Increased sm:w-36 to sm:w-56 so the placeholder fits nicely
+                  className="bg-transparent text-main text-sm outline-none w-full sm:w-56 placeholder:text-muted/60"
                 />
               </div>
+
               <div className="flex gap-1">
                 {(['all', 'buys', 'sells'] as const).map(f => (
                   <button
@@ -150,7 +167,6 @@ export function HistoryPage() {
                 {filteredTrades.map(trade => (
                   <tr key={trade.id} className="hover:bg-main/30 transition-colors group">
                     <td className="py-2 px-3 text-muted">
-                      {/* Formatted to DD/MM/YYYY inline here */}
                       <div className="text-sm font-medium">{trade.date.split('-').reverse().join('/')}</div>
                       <div className="text-[10px] text-muted/70 font-mono">{trade.time}</div>
                     </td>
@@ -173,6 +189,13 @@ export function HistoryPage() {
                     </td>
                   </tr>
                 ))}
+                {filteredTrades.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-muted font-medium">
+                      No trades found matching your filters.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
