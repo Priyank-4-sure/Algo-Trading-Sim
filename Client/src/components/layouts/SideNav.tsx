@@ -1,6 +1,7 @@
-import { LineChart, BarChart2, PieChart, History, Settings, Activity, Menu, LogOut } from 'lucide-react';
+// 1. Added Star to the lucide-react imports
+import { LineChart, BarChart2, PieChart, History, Settings, Activity, Menu, LogOut, Star } from 'lucide-react';
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom'; // 1. Import NavLink
+import { NavLink } from 'react-router-dom';
 
 interface SideNavProps {
   onLogout: () => void;
@@ -9,10 +10,11 @@ interface SideNavProps {
 export function SideNav({ onLogout }: SideNavProps) {
   const [expanded, setExpanded] = useState(false);
 
-  // 2. Updated items to use the actual URL paths defined in App.tsx
+  // 2. Added the Watchlist object to the navItems array
   const navItems = [
     { icon: <Activity size={20} />, label: 'Trade', path: '/app/trade' },
     { icon: <BarChart2 size={20} />, label: 'Markets', path: '/app/markets' },
+    { icon: <Star size={20} />, label: 'Watchlist', path: '/app/watchlist' }, // <-- NEW
     { icon: <LineChart size={20} />, label: 'Analytics', path: '/app/analytics' },
     { icon: <PieChart size={20} />, label: 'Portfolio', path: '/app/portfolio' },
     { icon: <History size={20} />, label: 'History', path: '/app/history' },
@@ -33,12 +35,10 @@ export function SideNav({ onLogout }: SideNavProps) {
 
       <nav className={`flex flex-col gap-3 w-full ${expanded ? 'px-3' : 'px-2'}`}>
         {navItems.map((item) => (
-          /* 3. Replaced <button> with <NavLink> */
           <NavLink
             key={item.path}
             to={item.path}
             title={expanded ? '' : item.label}
-            // 4. NavLink provides an 'isActive' boolean in its className callback
             className={({ isActive }) => `
               h-10 flex items-center rounded-xl transition-all duration-200 group relative
               ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}

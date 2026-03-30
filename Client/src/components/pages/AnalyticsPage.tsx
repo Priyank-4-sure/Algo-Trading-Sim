@@ -29,18 +29,19 @@ export function AnalyticsPage() {
   const dailyPnL = Array.from({ length: 14 }).map(() => (Math.random() - 0.4) * 1000);
 
   const [recentTrades] = useState([
-    { symbol: 'BTC/USD', side: 'Buy', price: 62450, pnl: +801.22, date: '2024-03-24' },
-    { symbol: 'ETH/USD', side: 'Sell', price: 3450, pnl: +147.97, date: '2024-03-23' },
-    { symbol: 'SOL/USD', side: 'Buy', price: 152, pnl: -159.75, date: '2024-03-22' },
-    { symbol: 'BTC/USD', side: 'Sell', price: 63100, pnl: +520.40, date: '2024-03-21' },
-    { symbol: 'AVAX/USD', side: 'Buy', price: 28, pnl: +608.00, date: '2024-03-20' },
+    { symbol: 'BTC/INR', side: 'Buy', price: 62450, pnl: +801.22, date: '2024-03-24' },
+    { symbol: 'ETH/INR', side: 'Sell', price: 3450, pnl: +147.97, date: '2024-03-23' },
+    { symbol: 'SOL/INR', side: 'Buy', price: 152, pnl: -159.75, date: '2024-03-22' },
+    { symbol: 'BTC/INR', side: 'Sell', price: 63100, pnl: +520.40, date: '2024-03-21' },
+    { symbol: 'AVAX/INR', side: 'Buy', price: 28, pnl: +608.00, date: '2024-03-20' },
   ]);
 
   const stats: StatCard[] = [
     { label: 'Total Trades', value: '247', change: '+12 this week', isPositive: true, icon: <BarChart2 size={18} /> },
     { label: 'Win Rate', value: '68.2%', change: '+2.1%', isPositive: true, icon: <Award size={18} /> },
-    { label: 'Avg Profit', value: '$342.50', change: '+$45.20', isPositive: true, icon: <DollarSign size={18} /> },
-    { label: 'Best Trade', value: '+$2,450', change: 'BTC/USD', icon: <TrendingUp size={18} /> },
+    // Updated to ₹
+    { label: 'Avg Profit', value: '₹342.50', change: '+₹45.20', isPositive: true, icon: <DollarSign size={18} /> },
+    { label: 'Best Trade', value: '+₹2,450', change: 'BTC/INR', icon: <TrendingUp size={18} /> },
   ];
 
   return (
@@ -100,8 +101,9 @@ export function AnalyticsPage() {
                     const isLast = i === portfolioHistory.length - 1;
                     return (
                       <div key={i} className="flex-1 min-w-[3px] max-w-[30px] flex flex-col items-center justify-end h-full group">
+                        {/* Updated Tooltip to ₹ */}
                         <div className="text-[10px] text-main font-bold opacity-0 group-hover:opacity-100 transition-opacity mb-1 font-mono">
-                          ${(value / 1000).toFixed(1)}k
+                          ₹{(value / 1000).toFixed(1)}k
                         </div>
                         <div
                           className="w-full rounded-t-sm transition-all bg-up hover:brightness-125"
@@ -175,10 +177,12 @@ export function AnalyticsPage() {
                     </div>
                   </div>
                   <div className="text-right">
+                    {/* Updated PnL to ₹ */}
                     <div className={`font-mono font-bold text-sm ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                      {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
+                      {trade.pnl >= 0 ? '+' : ''}₹{Math.abs(trade.pnl).toFixed(2)}
                     </div>
-                    <div className="text-[10px] text-muted font-mono">${trade.price.toLocaleString()}</div>
+                    {/* Updated Price to ₹ */}
+                    <div className="text-[10px] text-muted font-mono">₹{trade.price.toLocaleString()}</div>
                   </div>
                 </div>
               ))}

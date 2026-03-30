@@ -14,16 +14,16 @@ interface TradeRecord {
 }
 
 const TRADE_HISTORY: TradeRecord[] = [
-  { id: 1, symbol: 'BTC/USD', side: 'Buy', price: 62450, quantity: 0.45, total: 28102.50, pnl: 801.22, date: '2024-03-24', time: '14:32' },
-  { id: 2, symbol: 'ETH/USD', side: 'Sell', price: 3450, quantity: 2.12, total: 7314.00, pnl: 147.97, date: '2024-03-23', time: '09:15' },
-  { id: 3, symbol: 'SOL/USD', side: 'Buy', price: 152, quantity: 45, total: 6840.00, pnl: -159.75, date: '2024-03-22', time: '16:48' },
-  { id: 4, symbol: 'BTC/USD', side: 'Sell', price: 63100, quantity: 0.25, total: 15775.00, pnl: 520.40, date: '2024-03-21', time: '11:22' },
-  { id: 5, symbol: 'AVAX/USD', side: 'Buy', price: 28, quantity: 80, total: 2240.00, pnl: 608.00, date: '2024-03-20', time: '08:05' },
-  { id: 6, symbol: 'LINK/USD', side: 'Buy', price: 12, quantity: 150, total: 1800.00, pnl: 427.50, date: '2024-03-19', time: '13:40' },
-  { id: 7, symbol: 'ETH/USD', side: 'Buy', price: 3280, quantity: 3.5, total: 11480.00, pnl: 350.70, date: '2024-03-18', time: '10:12' },
-  { id: 8, symbol: 'SOL/USD', side: 'Sell', price: 145, quantity: 20, total: 2900.00, pnl: -85.00, date: '2024-03-17', time: '15:33' },
-  { id: 9, symbol: 'BTC/USD', side: 'Buy', price: 61200, quantity: 0.15, total: 9180.00, pnl: 454.58, date: '2024-03-16', time: '07:55' },
-  { id: 10, symbol: 'DOT/USD', side: 'Buy', price: 7.20, quantity: 200, total: 1440.00, pnl: -76.00, date: '2024-03-15', time: '12:18' },
+  { id: 1, symbol: 'BTC/INR', side: 'Buy', price: 62450, quantity: 0.45, total: 28102.50, pnl: 801.22, date: '2024-03-24', time: '14:32' },
+  { id: 2, symbol: 'ETH/INR', side: 'Sell', price: 3450, quantity: 2.12, total: 7314.00, pnl: 147.97, date: '2024-03-23', time: '09:15' },
+  { id: 3, symbol: 'SOL/INR', side: 'Buy', price: 152, quantity: 45, total: 6840.00, pnl: -159.75, date: '2024-03-22', time: '16:48' },
+  { id: 4, symbol: 'BTC/INR', side: 'Sell', price: 63100, quantity: 0.25, total: 15775.00, pnl: 520.40, date: '2024-03-21', time: '11:22' },
+  { id: 5, symbol: 'AVAX/INR', side: 'Buy', price: 28, quantity: 80, total: 2240.00, pnl: 608.00, date: '2024-03-20', time: '08:05' },
+  { id: 6, symbol: 'LINK/INR', side: 'Buy', price: 12, quantity: 150, total: 1800.00, pnl: 427.50, date: '2024-03-19', time: '13:40' },
+  { id: 7, symbol: 'ETH/INR', side: 'Buy', price: 3280, quantity: 3.5, total: 11480.00, pnl: 350.70, date: '2024-03-18', time: '10:12' },
+  { id: 8, symbol: 'SOL/INR', side: 'Sell', price: 145, quantity: 20, total: 2900.00, pnl: -85.00, date: '2024-03-17', time: '15:33' },
+  { id: 9, symbol: 'BTC/INR', side: 'Buy', price: 61200, quantity: 0.15, total: 9180.00, pnl: 454.58, date: '2024-03-16', time: '07:55' },
+  { id: 10, symbol: 'DOT/INR', side: 'Buy', price: 7.20, quantity: 200, total: 1440.00, pnl: -76.00, date: '2024-03-15', time: '12:18' },
 ];
 
 export function HistoryPage() {
@@ -55,7 +55,7 @@ export function HistoryPage() {
           <div className="glass-panel rounded-lg p-3 h-full">
             <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1"><ArrowUpRight size={12}/> Total P&L</div>
             <div className={`text-xl font-bold font-mono ${totalPnL >= 0 ? 'text-up' : 'text-down'}`}>
-              {totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}
+              {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toFixed(2)}
             </div>
           </div>
         </div>
@@ -148,14 +148,14 @@ export function HistoryPage() {
                       </div>
                     </td>
                     <td className="py-2 px-2 font-mono text-right text-main font-semibold text-sm">
-                      ${trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      ₹{trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </td>
                     <td className="py-2 px-2 font-mono text-right text-muted hidden sm:table-cell text-sm">{trade.quantity}</td>
                     <td className="py-2 px-2 font-mono text-right text-muted hidden md:table-cell text-sm">
-                      ${trade.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      ₹{trade.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className={`py-2 px-3 font-mono text-right font-bold text-sm ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                      {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
+                      {trade.pnl >= 0 ? '+' : ''}₹{Math.abs(trade.pnl).toFixed(2)}
                     </td>
                   </tr>
                 ))}
