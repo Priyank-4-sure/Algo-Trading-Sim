@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 
 export interface Holding {
   id: string;
@@ -16,62 +16,123 @@ export interface Holding {
   portfolioWeight: number;
 }
 
-const INITIAL_HOLDINGS: Omit<Holding, 'value' | 'unrealizedPnL' | 'pnLPercentage' | 'portfolioWeight'>[] = [
-  { id: 'btc', asset: 'BTC', name: 'Bitcoin', quantity: 0.452, avgPrice: 58200, currentPrice: 64230.50, change24hPercent: 2.45, color: '#F7931A', sparklineData: [58000, 59200, 60100, 59800, 61500, 62800, 63100, 64230] },
-  { id: 'eth', asset: 'ETH', name: 'Ethereum', quantity: 5.8, avgPrice: 3100, currentPrice: 3380.20, change24hPercent: -1.12, color: '#627EEA', sparklineData: [3200, 3350, 3280, 3420, 3380, 3310, 3390, 3380] },
-  { id: 'sol', asset: 'SOL', name: 'Solana', quantity: 45, avgPrice: 120, currentPrice: 148.45, change24hPercent: 5.3, color: '#9945FF', sparklineData: [125, 130, 128, 135, 140, 138, 145, 148] },
-  { id: 'avax', asset: 'AVAX', name: 'Avalanche', quantity: 80, avgPrice: 28, currentPrice: 35.60, change24hPercent: 3.1, color: '#E84142', sparklineData: [29, 30, 31, 30.5, 32, 33, 34, 35.6] },
-  { id: 'link', asset: 'LINK', name: 'Chainlink', quantity: 150, avgPrice: 12, currentPrice: 14.85, change24hPercent: -0.8, color: '#2A5ADA', sparklineData: [13, 13.5, 14, 13.8, 14.2, 14.5, 14.9, 14.85] },
-];
+const getAssetColor = (asset: string) => {
+  const colors: Record<string, string> = {
+    BTC: '#F7931A', ETH: '#627EEA', SOL: '#9945FF',
+    AVAX: '#E84142', LINK: '#2A5ADA'
+  };
+  return colors[asset?.toUpperCase()] || '#888888'; 
+};
 
 export function usePortfolio() {
-  const [holdingsData, setHoldingsData] = useState(INITIAL_HOLDINGS);
-  const [cashBalance] = useState(13467.82);
+  // 1. Start with an empty table and 0 cash
+  const [holdingsData, setHoldingsData] = useState<any[]>([]);
+  const [cashBalance, setCashBalance] = useState(0); 
 
+  // 2. The function that changes the price on the screen
+  const updatePrice = useCallback((id: string, newPrice: number, change24h: number) => {
+    setHoldingsData(prev => prev.map(h => {
+      // Find the coin that matches the Walkie-Talkie message
+      if (h.asset.toLowerCase() !== id.toLowerCase()) return h;
+      
+      const sparklineData = h.sparklineData || Array(8).fill(newPrice);
+      const newSparkline = [...sparklineData.slice(1), newPrice];
+      
+      return { ...h, currentPrice: newPrice, change24hPercent: change24h, sparklineData: newSparkline };
+    }));
+  }, []);
+
+  // 3. The websocketConnection
+  useEffect(() => {
+    const token = localStorage.getItem('access_token'); 
+    
+    if (!token) {
+      console.warn('WebSocket connection aborted: No authentication token available.');
+      return;
+    }
+
+    const wsUrl = `ws://localhost:8080/v1/ws?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('🟢 WebSocket connected! Asking for menu...');
+      ws.send(JSON.stringify({ action: 'subscribe', topic: 'portfolio:data' }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+
+        // A. Is this the Initial Data? (The Full Table)
+        if (payload.data && payload.data.portfolio) {
+           console.log('🍽️ Initial Food Arrived:', payload.data.portfolio);
+           setCashBalance(payload.data.portfolio.balance || 0);
+           
+           if (payload.data.portfolio.holdings) {
+               // Dress up the raw data with colors and starting prices
+               const formattedHoldings = payload.data.portfolio.holdings.map((dbHolding: any) => ({
+                   id: dbHolding.symbol,
+                   asset: dbHolding.symbol,
+                   name: dbHolding.symbol, 
+                   quantity: dbHolding.quantity,
+                   avgPrice: 100, // Using 100 as a fake buy price so PnL works
+                   currentPrice: 100, 
+                   change24hPercent: 0, 
+                   color: getAssetColor(dbHolding.symbol),
+                   sparklineData: Array(8).fill(100) 
+               }));
+               setHoldingsData(formattedHoldings);
+           }
+        }
+        
+        // B. Is this a fast Price Update? (The live ticks)
+        if (payload.type === 'PRICE_UPDATE') {
+          updatePrice(payload.asset.toLowerCase(), payload.newPrice, payload.change24h);
+        }
+
+      } catch (error) {
+        console.error('Failed to parse incoming WebSocket payload:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      if (ws.readyState !== WebSocket.CLOSED) console.error('🔴 Walkie-Talkie Error:', error);
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+    };
+  }, [updatePrice]);
+
+  // 4. The Math Engine (Calculates PnL automatically based on real data)
   const holdings: Holding[] = useMemo(() => {
+    if (!holdingsData.length) return []; 
+
     const rawHoldings = holdingsData.map(h => {
       const value = h.quantity * h.currentPrice;
       const costBasis = h.quantity * h.avgPrice;
       const unrealizedPnL = value - costBasis;
-      const pnLPercentage = ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100;
+      const pnLPercentage = h.avgPrice > 0 ? ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100 : 0;
       return { ...h, value, unrealizedPnL, pnLPercentage, portfolioWeight: 0 };
     });
+    
     const totalValue = rawHoldings.reduce((sum, h) => sum + h.value, 0) + cashBalance;
-    return rawHoldings.map(h => ({ ...h, portfolioWeight: (h.value / totalValue) * 100 }));
+    return rawHoldings.map(h => ({ ...h, portfolioWeight: totalValue > 0 ? (h.value / totalValue) * 100 : 0 }));
   }, [holdingsData, cashBalance]);
 
-  const totalPortfolioValue = useMemo(() =>
-    holdings.reduce((sum, h) => sum + h.value, 0) + cashBalance
-  , [holdings, cashBalance]);
-
-  const totalUnrealizedPnL = useMemo(() =>
-    holdings.reduce((sum, h) => sum + h.unrealizedPnL, 0)
-  , [holdings]);
-
+  const totalPortfolioValue = useMemo(() => holdings.reduce((sum, h) => sum + h.value, 0) + cashBalance, [holdings, cashBalance]);
+  const totalUnrealizedPnL = useMemo(() => holdings.reduce((sum, h) => sum + h.unrealizedPnL, 0), [holdings]);
   const totalPnLPercentage = useMemo(() => {
     const totalCost = holdings.reduce((sum, h) => sum + h.quantity * h.avgPrice, 0);
     return totalCost > 0 ? (totalUnrealizedPnL / totalCost) * 100 : 0;
   }, [holdings, totalUnrealizedPnL]);
 
-  const riskMetrics = useMemo(() => ({
-    sharpeRatio: 1.85,
-    maxDrawdown: -12.4,
-    volatility: 24.6,
-    winRate: 68.2,
-  }), []);
-
+  const riskMetrics = useMemo(() => ({ sharpeRatio: 1.85, maxDrawdown: -12.4, volatility: 24.6, winRate: 68.2 }), []);
   const concentrationWarning = useMemo(() => {
+    if (!holdings.length) return null;
     const maxHolding = holdings.reduce((prev, curr) => curr.portfolioWeight > prev.portfolioWeight ? curr : prev, holdings[0]);
-    return maxHolding ? { asset: maxHolding.asset, percentage: maxHolding.portfolioWeight } : null;
+    return maxHolding && maxHolding.portfolioWeight > 40 ? { asset: maxHolding.asset, percentage: maxHolding.portfolioWeight } : null;
   }, [holdings]);
-
-  const updatePrice = useCallback((id: string, newPrice: number, change24h: number) => {
-    setHoldingsData(prev => prev.map(h => {
-      if (h.id !== id) return h;
-      const newSparkline = [...h.sparklineData.slice(1), newPrice];
-      return { ...h, currentPrice: newPrice, change24hPercent: change24h, sparklineData: newSparkline };
-    }));
-  }, []);
 
   return { holdings, cashBalance, totalPortfolioValue, totalUnrealizedPnL, totalPnLPercentage, riskMetrics, concentrationWarning, updatePrice };
 }

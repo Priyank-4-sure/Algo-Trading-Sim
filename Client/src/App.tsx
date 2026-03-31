@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   createBrowserRouter, 
   RouterProvider, 
@@ -22,22 +22,17 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const { isAuthenticated, loading, logout } = useAuth();
 
-  const toggleDarkMode = () => setDarkMode(!darkMode);
+  // Memoize the toggle function so it doesn't trigger unnecessary re-renders
+  const toggleDarkMode = useCallback(() => setDarkMode(prev => !prev), []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
   // ─── REACT ROUTER CONFIGURATION ────────────────────────────────
-  const router = createBrowserRouter([
+  // Wrapped in useMemo to prevent the router from re-initializing every time state changes.
+  // This must remain ABOVE the `if (loading)` block to obey React Hook rules.
+  const router = useMemo(() => createBrowserRouter([
     {
       path: "/",
       element: <LandingPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
@@ -78,7 +73,16 @@ export default function App() {
         { path: "history", element: <HistoryPage /> },
       ]
     }
-  ]);
+  ]), [darkMode, isAuthenticated, logout, toggleDarkMode]);
+
+  // Loading state handled AFTER all hooks are called
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return <RouterProvider router={router} />;
 }
