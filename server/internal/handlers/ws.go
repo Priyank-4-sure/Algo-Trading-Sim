@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
@@ -87,6 +88,8 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				go h.streamPortFolioData(ctx, c, msg.Topic, userID)
+			case msg.Topic == "prices:all": // ← add this
+				go h.streamPrices(ctx, c)
 			default:
 				slog.Error("Unknown topic requested", "topic", msg.Topic)
 			}
@@ -315,4 +318,74 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 			}
 		}(holding.Symbol)
 	}
+}
+
+func (h *Handler) streamPrices(ctx context.Context, c *websocket.Conn) {
+	pubsub := h.DB.Redis.Subscribe(ctx, "prices:all")
+	defer pubsub.Close()
+	ch := pubsub.Channel()
+
+	log.Printf("📡 Subscribed to Redis channel: prices:all")
+
+	// 1. Send initial full snapshot immediately on connect
+	if err := h.pushMarketPrices(ctx, c); err != nil {
+		log.Printf("Failed to send initial market prices: %v", err)
+		return
+	}
+
+	// 2. Throttle — at most one push per 500ms regardless of tick frequency
+	throttle := time.NewTicker(500 * time.Millisecond)
+	defer throttle.Stop()
+	dirty := false // true if a tick arrived since last push
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("🛑 Client disconnected from prices:all")
+			return
+
+		case <-ch:
+			dirty = true // tick received, mark as needing a push
+
+		case <-throttle.C:
+			if !dirty {
+				continue
+			}
+			dirty = false
+			if err := h.pushMarketPrices(ctx, c); err != nil {
+				log.Printf("Failed to push market prices: %v", err)
+				return
+			}
+		}
+	}
+}
+
+// pushMarketPrices fetches full MarketPriceData for all assets and writes to the WebSocket.
+func (h *Handler) pushMarketPrices(ctx context.Context, c *websocket.Conn) error {
+	// Load assets from Redis to get symbols + start prices
+	assetsMap, err := h.DB.Redis.HGetAll(ctx, "market:assets").Result()
+	if err != nil || len(assetsMap) == 0 {
+		return fmt.Errorf("no assets in Redis: %w", err)
+	}
+
+	symbols := make([]string, 0, len(assetsMap))
+	startPrices := make(map[string]float64, len(assetsMap))
+
+	for _, assetStr := range assetsMap {
+		var asset struct {
+			Ticker     string  `json:"ticker"`
+			StartPrice float64 `json:"start_price"`
+		}
+		if err := json.Unmarshal([]byte(assetStr), &asset); err == nil && asset.Ticker != "" {
+			symbols = append(symbols, asset.Ticker)
+			startPrices[asset.Ticker] = asset.StartPrice
+		}
+	}
+
+	prices := h.Store.GetMarketPrices(symbols, startPrices)
+
+	return wsjson.Write(ctx, c, models.ServerMessage{
+		Topic: "prices:all",
+		Data:  prices,
+	})
 }
