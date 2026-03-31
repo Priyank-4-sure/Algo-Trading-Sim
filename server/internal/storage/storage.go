@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -213,39 +214,36 @@ func (s *Store) ResetDatabase() error {
 // ---- InsertOrder ----
 // Stores order in Redis with a 24h TTL. CANCEL orders are skipped.
 
-func (s *Store) InsertOrder(order models.Order) {
-	if order.Type == models.Cancel {
-		return
-	}
+// Return an error so the handler can react if Redis is down
+func (s *Store) InsertOrder(order models.Order) error {
+    if order.Type == models.Cancel {
+        return nil
+    }
 
-	go func(order models.Order) {
-		key := "order:" + order.ID
-		data, err := json.Marshal(order)
-		if err != nil {
-			// log.Printf("[Storage] InsertOrder marshal failed for %s: %v", order.ID, err)
-			return
-		}
+    key := "order:" + order.ID
+    data, err := json.Marshal(order)
+    if err != nil {
+        return fmt.Errorf("marshal failed: %w", err)
+    }
 
-		if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
-			// log.Printf("[Storage] InsertOrder Redis set failed for %s: %v", order.ID, err)
-			return
-		}
+    // Execute synchronously (no 'go func')
+    if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
+        return fmt.Errorf("redis set failed: %w", err)
+    }
 
-		score := float64(time.Now().UnixNano())
+    score := float64(time.Now().UnixNano())
 
-		s.redis.ZAdd(s.ctx, fmt.Sprintf("orders:user:%d", order.UserID), redis.Z{
-			Score:  score,
-			Member: order.ID,
-		})
+    s.redis.ZAdd(s.ctx, fmt.Sprintf("orders:user:%d", order.UserID), redis.Z{
+        Score:  score,
+        Member: order.ID,
+    })
 
-		s.redis.ZAdd(s.ctx, "orders:open:"+order.Symbol, redis.Z{
-			Score:  score,
-			Member: order.ID,
-		})
+    s.redis.ZAdd(s.ctx, "orders:open:"+order.Symbol, redis.Z{
+        Score:  score,
+        Member: order.ID,
+    })
 
-		// log.Printf("[Storage] InsertOrder stored in Redis: %s (user=%d symbol=%s)",
-			// order.ID, order.UserID, order.Symbol)
-	}(order)
+    return nil
 }
 
 // ---- StartPipeline ----
@@ -420,32 +418,45 @@ func (s *Store) GetRecentTrades(symbol string, n int64) ([]models.TradeMessage, 
 }
 
 func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, error) {
-	view := "candles_1s"
-	if interval == "5s" {
-		view = "candles_5s"
-	}
-	var candles []CandleRecord
-	err := s.tsdb.
-		Raw(fmt.Sprintf(`
-			SELECT symbol, bucket, open, high, low, close, volume
-			FROM %s
-			WHERE symbol = ?
-			ORDER BY bucket DESC
-			LIMIT ?`, view),
-			symbol, limit).
-		Scan(&candles).Error
-	return candles, err
+    view := "candles_1s"
+    if interval == "5s" {
+        view = "candles_5s"
+    }
+    
+    var candles []CandleRecord
+    
+    // Wrap in a subquery to sort Oldest -> Newest for the frontend chart
+    query := fmt.Sprintf(`
+        SELECT * FROM (
+            SELECT symbol, bucket, open, high, low, close, volume
+            FROM %s
+            WHERE symbol = ?
+            ORDER BY bucket DESC
+            LIMIT ?
+        ) AS recent_candles
+        ORDER BY bucket ASC
+    `, view)
+
+    err := s.tsdb.Raw(query, symbol, limit).Scan(&candles).Error
+    return candles, err
 }
 
 func (s *Store) GetOrderByID(orderID string) (*models.Order, error) {
 	raw, err := s.redis.Get(s.ctx, "order:"+orderID).Result()
 	if err != nil {
-		return nil, fmt.Errorf("order %s not found", orderID)
+		// Check if the error specifically means "key not found"
+		if errors.Is(err, redis.Nil) {
+			return nil, fmt.Errorf("order %s not found", orderID)
+		}
+		// If it's any other error (e.g., connection refused), return the actual error
+		return nil, fmt.Errorf("failed to fetch order %s from redis: %w", orderID, err)
 	}
+
 	var order models.Order
 	if err := json.Unmarshal([]byte(raw), &order); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal order %s: %w", orderID, err)
 	}
+
 	return &order, nil
 }
 
@@ -512,7 +523,7 @@ func (s *Store) GetMidPrice(symbol string) (string, error) {
 // GetCurrentPrice queries TimescaleDB for the most recent executed trade price of a symbol.
 func (s *Store) GetCurrentPrice(symbol string) (float64, error) {
 	var price float64
-	
+
 	err := s.tsdb.Raw(`
 		SELECT price
 		FROM trade_records
@@ -525,7 +536,7 @@ func (s *Store) GetCurrentPrice(symbol string) (float64, error) {
 		return 0, fmt.Errorf("failed to query current price for %s: %w", symbol, err)
 	}
 
-	// GORM's Scan() into a primitive type won't error out if 0 rows are returned; 
+	// GORM's Scan() into a primitive type won't error out if 0 rows are returned;
 	// it will just leave the float64 at its zero value (0.0).
 	if price == 0 {
 		return 0, fmt.Errorf("no trades found for symbol: %s", symbol)

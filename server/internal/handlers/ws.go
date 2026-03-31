@@ -17,6 +17,11 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
+type priceUpdate struct {
+	Symbol string
+	Price  any
+}
+
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// 1. Try to Authenticate
 	var userID uint
@@ -153,79 +158,125 @@ func (h *Handler) streamLobSnapshot(ctx context.Context, c *websocket.Conn, topi
 }
 
 func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic string) {
-	// 1. Subscribe to the Redis channel
-	pubsub := h.DB.Redis.Subscribe(ctx, topic)
-	defer pubsub.Close()
-	ch := pubsub.Channel()
+    pubsub := h.DB.Redis.Subscribe(ctx, topic)
+    defer pubsub.Close()
+    ch := pubsub.Channel()
 
-	log.Printf("📡 Subscribed to Redis channel: %s", topic)
+    log.Printf("📡 Subscribed to Redis channel: %s", topic)
 
-	for {
-		select {
-		case <-ctx.Done():
-			// Context is canceled when the client disconnects or request ends
-			log.Printf("🛑 Client disconnected from %s", topic)
-			return
+    // 1. Extract the actual symbol from the topic (e.g., "candles:TECH" -> "TECH")
+    symbol := topic
+    parts := strings.Split(topic, ":")
+    if len(parts) == 2 {
+        symbol = parts[1]
+    }
 
-		case msg := <-ch:
-			// 2. Use json.RawMessage to pass the JSON through efficiently
-			// without needing to decode/encode fields we aren't modifying.
-			var candleData json.RawMessage = []byte(msg.Payload)
+    // 2. Fetch using the extracted symbol
+    candles, err := h.Store.GetCandles(symbol, "1s", 100)    
+    if err != nil {
+        log.Printf("Error fetching candles for %s: %v", symbol, err)
+    }
 
-			// 3. Wrap in your standard ServerMessage
-			response := models.ServerMessage{
-				Topic: topic,
-				Data:  candleData,
-			}
-
-			// 4. Send to the frontend
-			if err := wsjson.Write(ctx, c, response); err != nil {
-				// If this fails, the client likely dropped the connection
-				return
-			}
-		}
-	}
+    if len(candles) > 0 {
+        // 3. Send historical data with a distinct topic or flag so the frontend 
+        // knows it's receiving an Array of candles, not a single Object.
+        if err := wsjson.Write(ctx, c, models.ServerMessage{
+            Topic: topic + ":historical", // Distinct topic for the initial load
+            Data:  candles,
+        }); err != nil {
+            return
+        }
+    } else {
+        log.Printf("No historical candles found for %s", symbol)
+    }
+    
+    // ... (Your real-time select loop remains exactly the same)
+    for {
+        select {
+        case <-ctx.Done():
+            log.Printf("🛑 Client disconnected from %s", topic)
+            return
+        case msg := <-ch:
+            var candleData json.RawMessage = []byte(msg.Payload)
+            response := models.ServerMessage{
+                Topic: topic,
+                Data:  candleData,
+            }
+            if err := wsjson.Write(ctx, c, response); err != nil {
+                return
+            }
+        }
+    }
 }
 
 func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, topic string, userID uint) {
-	// get User Porfolio from Postgres
+	// 1. Get User Portfolio from Postgres
 	portfolio, err := h.GetPortfolio(fmt.Sprintf("%d", userID))
-
 	if err != nil {
 		slog.Error("Failed to get portfolio for user", "userID", userID, "error", err)
 		return
 	}
 
-	// send inital Holdings and Portfolio Data and holdings current price from candlestickDB
+	// 2. Fetch initial prices
 	currentPrices := make(map[string]any)
-
 	for _, holding := range portfolio.Holdings {
-		// get current price from timescaleDB
-		price, error := h.Store.GetCurrentPrice(holding.Symbol)
-		if error != nil {
-			slog.Error("Failed to get current price for symbol", "symbol", holding.Symbol, "error", error)
+		price, err := h.Store.GetCurrentPrice(holding.Symbol)
+		if err != nil {
+			slog.Error("Failed to get initial price", "symbol", holding.Symbol, "error", err)
 			continue
 		}
 		currentPrices[holding.Symbol] = price
 	}
 
-	response := models.ServerMessage{
+	// 3. Send initial payload
+	initialResponse := models.ServerMessage{
 		Topic: topic,
 		Data: map[string]any{
 			"portfolio":     portfolio,
 			"currentPrices": currentPrices,
 		},
 	}
-
-	if err := wsjson.Write(ctx, c, response); err != nil {
-		slog.Error("Failed to write portfolio data to websocket", "userID", userID, "error", err)
+	if err := wsjson.Write(ctx, c, initialResponse); err != nil {
+		slog.Error("Failed to write initial portfolio data", "userID", userID, "error", err)
 		return
 	}
 
-	// subscribe to Redis channel for candlestick updates for the symbols in the user's holdings
+	// 4. Create a central channel for state updates
+	updateCh := make(chan priceUpdate)
+
+	// 5. Start a SINGLE state-manager goroutine
+	// This ensures only one thread updates the map and writes to the websocket
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return // exit if websocket disconnects
+			case update := <-updateCh:
+				// Safely update the map (no mutex needed since it's only happening in this goroutine)
+				currentPrices[update.Symbol] = update.Price
+
+				response := models.ServerMessage{
+					Topic: topic,
+					Data: map[string]any{
+						"portfolio":     portfolio,
+						"currentPrices": currentPrices,
+					},
+				}
+
+				// Safely write to websocket sequentially
+				if err := wsjson.Write(ctx, c, response); err != nil {
+					log.Printf("Failed to write websocket update for user %d: %v", userID, err)
+					return // consider closing the connection/context here
+				}
+			}
+		}
+	}()
+
+	// 6. Start Redis subscribers for each holding
 	for _, holding := range portfolio.Holdings {
-		candleTopic := "candles:" + holding.Symbol
+		// Pass holding.Symbol explicitly to the closure to avoid variable capture bugs
 		go func(symbol string) {
+			candleTopic := "candles:" + symbol
 			pubsub := h.DB.Redis.Subscribe(ctx, candleTopic)
 			defer pubsub.Close()
 			ch := pubsub.Channel()
@@ -238,31 +289,30 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 					log.Printf("🛑 Client disconnected from %s", candleTopic)
 					return
 				case msg := <-ch:
-					fmt.Printf("Received message on %s for user %d: %s\n", candleTopic, userID, msg.Payload)
+					// PRO TIP: Try to unmarshal the price directly from msg.Payload
+					// instead of hitting the database!
+					// Example:
+					// var newPrice float64
+					// if err := json.Unmarshal([]byte(msg.Payload), &newPrice); err == nil {
+					//     updateCh <- priceUpdate{Symbol: symbol, Price: newPrice}
+					// }
+
+					log.Printf("Received update for %s: %s", symbol, msg.Payload)
+
+					// If you MUST hit the DB:
 					price, err := h.Store.GetCurrentPrice(symbol)
 					if err != nil {
-						slog.Error("Failed to get current price for symbol", "symbol", symbol, "error", err)
+						slog.Error("Failed to get current price", "symbol", symbol, "error", err)
 						continue
 					}
 
-					currentPrices[symbol] = price
-
-					response := models.ServerMessage{
-						Topic: topic,
-						Data: map[string]any{
-							"portfolio":     portfolio,
-							"currentPrices": currentPrices,
-						},
+					// Send the update to the manager goroutine
+					updateCh <- priceUpdate{
+						Symbol: symbol,
+						Price:  price,
 					}
-
-					if err := wsjson.Write(ctx, c, response); err != nil {
-						log.Printf("Failed to write portfolio update to websocket for user %d: %v", userID, err)
-						return
-					}
-
 				}
 			}
-		}(candleTopic)
+		}(holding.Symbol)
 	}
-
 }
