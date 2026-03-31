@@ -65,6 +65,12 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 				r.Get("/history", h.GetPortfolioHistory)
 				r.Post("/reset", h.ResetPortfolio)
 			})
+
+			r.Route("/watchlist", func(r chi.Router) {
+				r.Get("/", h.GetWatchlist)
+				r.Post("/{symbol}", h.AddToWatchlist)
+				r.Delete("/{symbol}", h.RemoveFromWatchlist)
+			})
 		})
 	})
 

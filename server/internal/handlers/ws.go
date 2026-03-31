@@ -88,8 +88,14 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				go h.streamPortFolioData(ctx, c, msg.Topic, userID)
-			case msg.Topic == "prices:all": // ← add this
+			case msg.Topic == "prices:all":
 				go h.streamPrices(ctx, c)
+			case msg.Topic == "watchlist":
+				if userID == 0 {
+					slog.Warn("Unauthenticated client tried to subscribe to watchlist")
+					continue
+				}
+				go h.streamWatchlist(ctx, c, userID)
 			default:
 				slog.Error("Unknown topic requested", "topic", msg.Topic)
 			}
@@ -386,6 +392,92 @@ func (h *Handler) pushMarketPrices(ctx context.Context, c *websocket.Conn) error
 
 	return wsjson.Write(ctx, c, models.ServerMessage{
 		Topic: "prices:all",
+		Data:  prices,
+	})
+}
+
+// streamWatchlist sends live market data for only the user's watchlist symbols.
+// It sends an initial snapshot on connect, then listens on prices:all and
+// re-fetches data for the watchlist symbols on each trigger (throttled to 500ms).
+func (h *Handler) streamWatchlist(ctx context.Context, c *websocket.Conn, userID uint) {
+	log.Printf("📡 Starting watchlist stream for user %d", userID)
+
+	// 1. Send initial snapshot
+	if err := h.pushWatchlistPrices(ctx, c, userID); err != nil {
+		log.Printf("Failed to send initial watchlist data for user %d: %v", userID, err)
+		return
+	}
+
+	// 2. Subscribe to prices:all trigger channel
+	pubsub := h.DB.Redis.Subscribe(ctx, "prices:all")
+	defer pubsub.Close()
+	ch := pubsub.Channel()
+
+	// 3. Throttle — at most one push per 500ms
+	throttle := time.NewTicker(500 * time.Millisecond)
+	defer throttle.Stop()
+	dirty := false
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("🛑 User %d disconnected from watchlist stream", userID)
+			return
+		case <-ch:
+			dirty = true
+		case <-throttle.C:
+			if !dirty {
+				continue
+			}
+			dirty = false
+			if err := h.pushWatchlistPrices(ctx, c, userID); err != nil {
+				log.Printf("Failed to push watchlist prices for user %d: %v", userID, err)
+				return
+			}
+		}
+	}
+}
+
+// pushWatchlistPrices fetches the user's watchlist from Postgres, loads start prices
+// from Redis, computes live market data, and writes it to the WebSocket.
+func (h *Handler) pushWatchlistPrices(ctx context.Context, c *websocket.Conn, userID uint) error {
+	// 1. Get watchlist entries from Postgres
+	var entries []models.Watchlist
+	if err := h.DB.Primary.Where("user_id = ?", userID).Find(&entries).Error; err != nil {
+		return fmt.Errorf("failed to query watchlist: %w", err)
+	}
+
+	if len(entries) == 0 {
+		return wsjson.Write(ctx, c, models.ServerMessage{
+			Topic: "watchlist",
+			Data:  []interface{}{},
+		})
+	}
+
+	// 2. Load start prices from Redis market:assets
+	symbols := make([]string, 0, len(entries))
+	startPrices := make(map[string]float64, len(entries))
+
+	for _, entry := range entries {
+		assetStr, err := h.DB.Redis.HGet(ctx, "market:assets", entry.Symbol).Result()
+		if err != nil {
+			continue
+		}
+		var asset struct {
+			Ticker     string  `json:"ticker"`
+			StartPrice float64 `json:"start_price"`
+		}
+		if err := json.Unmarshal([]byte(assetStr), &asset); err == nil && asset.Ticker != "" {
+			symbols = append(symbols, asset.Ticker)
+			startPrices[asset.Ticker] = asset.StartPrice
+		}
+	}
+
+	// 3. Compute live market data
+	prices := h.Store.GetMarketPrices(symbols, startPrices)
+
+	return wsjson.Write(ctx, c, models.ServerMessage{
+		Topic: "watchlist",
 		Data:  prices,
 	})
 }
