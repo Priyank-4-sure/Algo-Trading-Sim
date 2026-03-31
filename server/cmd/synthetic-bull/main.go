@@ -47,35 +47,6 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("healthy", time.Now()))
 }
 
-func handleOrder(w http.ResponseWriter, r *http.Request) {
-	var req models.Order
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid JSON", err))
-		return
-	}
-
-	if req.ID == "" || req.Quantity <= 0 {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID or invalid Quantity", nil))
-		return
-	}
-
-	// Persist order to Redis before sending to engine
-	if store != nil {
-		store.InsertOrder(req)
-	}
-
-	orderStream <- req
-
-	response.WriteJson(w, http.StatusAccepted, map[string]interface{}{
-		"message":  "Order accepted into queue",
-		"order_id": req.ID,
-		"symbol":   req.Symbol,
-		"status":   "QUEUED",
-		"details":  req,
-	})
-}
-
 // --------------------
 // Main
 // --------------------
@@ -219,7 +190,6 @@ func main() {
 	// 12. Register routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
-	r.Post("/order", handleOrder)
 
 	// 13. HTTP server
 	address := ":" + strconv.Itoa(cfg.Server.Port)
