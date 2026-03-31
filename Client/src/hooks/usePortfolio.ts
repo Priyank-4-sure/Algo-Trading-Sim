@@ -75,8 +75,8 @@ export function usePortfolio() {
                    asset: dbHolding.symbol,
                    name: dbHolding.symbol, 
                    quantity: dbHolding.quantity,
-                   avgPrice: 100, // Using 100 as a fake buy price so PnL works
-                   currentPrice: 100, 
+                   avgPrice: dbHolding.avg_price || 100, // Using 100 as a fake buy price so PnL works
+                   currentPrice: dbHolding.current_price || 100,
                    change24hPercent: 0, 
                    color: getAssetColor(dbHolding.symbol),
                    sparklineData: Array(8).fill(100) 

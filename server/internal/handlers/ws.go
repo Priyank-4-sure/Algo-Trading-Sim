@@ -158,55 +158,55 @@ func (h *Handler) streamLobSnapshot(ctx context.Context, c *websocket.Conn, topi
 }
 
 func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic string) {
-    pubsub := h.DB.Redis.Subscribe(ctx, topic)
-    defer pubsub.Close()
-    ch := pubsub.Channel()
+	pubsub := h.DB.Redis.Subscribe(ctx, topic)
+	defer pubsub.Close()
+	ch := pubsub.Channel()
 
-    log.Printf("📡 Subscribed to Redis channel: %s", topic)
+	log.Printf("📡 Subscribed to Redis channel: %s", topic)
 
-    // 1. Extract the actual symbol from the topic (e.g., "candles:TECH" -> "TECH")
-    symbol := topic
-    parts := strings.Split(topic, ":")
-    if len(parts) == 2 {
-        symbol = parts[1]
-    }
+	// 1. Extract the actual symbol from the topic (e.g., "candles:TECH" -> "TECH")
+	symbol := topic
+	parts := strings.Split(topic, ":")
+	if len(parts) == 2 {
+		symbol = parts[1]
+	}
 
-    // 2. Fetch using the extracted symbol
-    candles, err := h.Store.GetCandles(symbol, "1s", 100)    
-    if err != nil {
-        log.Printf("Error fetching candles for %s: %v", symbol, err)
-    }
+	// 2. Fetch using the extracted symbol
+	candles, err := h.Store.GetCandles(symbol, "1s", 100)
+	if err != nil {
+		log.Printf("Error fetching candles for %s: %v", symbol, err)
+	}
 
-    if len(candles) > 0 {
-        // 3. Send historical data with a distinct topic or flag so the frontend 
-        // knows it's receiving an Array of candles, not a single Object.
-        if err := wsjson.Write(ctx, c, models.ServerMessage{
-            Topic: topic + ":historical", // Distinct topic for the initial load
-            Data:  candles,
-        }); err != nil {
-            return
-        }
-    } else {
-        log.Printf("No historical candles found for %s", symbol)
-    }
-    
-    // ... (Your real-time select loop remains exactly the same)
-    for {
-        select {
-        case <-ctx.Done():
-            log.Printf("🛑 Client disconnected from %s", topic)
-            return
-        case msg := <-ch:
-            var candleData json.RawMessage = []byte(msg.Payload)
-            response := models.ServerMessage{
-                Topic: topic,
-                Data:  candleData,
-            }
-            if err := wsjson.Write(ctx, c, response); err != nil {
-                return
-            }
-        }
-    }
+	if len(candles) > 0 {
+		// 3. Send historical data with a distinct topic or flag so the frontend
+		// knows it's receiving an Array of candles, not a single Object.
+		if err := wsjson.Write(ctx, c, models.ServerMessage{
+			Topic: topic + ":historical", // Distinct topic for the initial load
+			Data:  candles,
+		}); err != nil {
+			return
+		}
+	} else {
+		log.Printf("No historical candles found for %s", symbol)
+	}
+
+	// ... (Your real-time select loop remains exactly the same)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("🛑 Client disconnected from %s", topic)
+			return
+		case msg := <-ch:
+			var candleData json.RawMessage = []byte(msg.Payload)
+			response := models.ServerMessage{
+				Topic: topic,
+				Data:  candleData,
+			}
+			if err := wsjson.Write(ctx, c, response); err != nil {
+				return
+			}
+		}
+	}
 }
 
 func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, topic string, userID uint) {
@@ -217,23 +217,20 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 		return
 	}
 
-	// 2. Fetch initial prices
-	currentPrices := make(map[string]any)
 	for _, holding := range portfolio.Holdings {
 		price, err := h.Store.GetCurrentPrice(holding.Symbol)
 		if err != nil {
 			slog.Error("Failed to get initial price", "symbol", holding.Symbol, "error", err)
 			continue
 		}
-		currentPrices[holding.Symbol] = price
+		holding.CurrentPrice = price
 	}
 
 	// 3. Send initial payload
 	initialResponse := models.ServerMessage{
 		Topic: topic,
 		Data: map[string]any{
-			"portfolio":     portfolio,
-			"currentPrices": currentPrices,
+			"portfolio": portfolio,
 		},
 	}
 	if err := wsjson.Write(ctx, c, initialResponse); err != nil {
@@ -253,13 +250,16 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 				return // exit if websocket disconnects
 			case update := <-updateCh:
 				// Safely update the map (no mutex needed since it's only happening in this goroutine)
-				currentPrices[update.Symbol] = update.Price
-
+				for i := range portfolio.Holdings {
+					if portfolio.Holdings[i].Symbol == update.Symbol {
+						portfolio.Holdings[i].CurrentPrice = update.Price.(float64)
+						break
+					}
+				}
 				response := models.ServerMessage{
 					Topic: topic,
 					Data: map[string]any{
-						"portfolio":     portfolio,
-						"currentPrices": currentPrices,
+						"portfolio": portfolio,
 					},
 				}
 
