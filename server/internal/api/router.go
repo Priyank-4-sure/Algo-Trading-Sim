@@ -19,7 +19,7 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300, 
+		MaxAge:           300,
 	}))
 
 	// Middleware

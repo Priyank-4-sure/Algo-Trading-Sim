@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
@@ -216,34 +218,34 @@ func (s *Store) ResetDatabase() error {
 
 // Return an error so the handler can react if Redis is down
 func (s *Store) InsertOrder(order models.Order) error {
-    if order.Type == models.Cancel {
-        return nil
-    }
+	if order.Type == models.Cancel {
+		return nil
+	}
 
-    key := "order:" + order.ID
-    data, err := json.Marshal(order)
-    if err != nil {
-        return fmt.Errorf("marshal failed: %w", err)
-    }
+	key := "order:" + order.ID
+	data, err := json.Marshal(order)
+	if err != nil {
+		return fmt.Errorf("marshal failed: %w", err)
+	}
 
-    // Execute synchronously (no 'go func')
-    if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
-        return fmt.Errorf("redis set failed: %w", err)
-    }
+	// Execute synchronously (no 'go func')
+	if err := s.redis.Set(s.ctx, key, data, 24*time.Hour).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
 
-    score := float64(time.Now().UnixNano())
+	score := float64(time.Now().UnixNano())
 
-    s.redis.ZAdd(s.ctx, fmt.Sprintf("orders:user:%d", order.UserID), redis.Z{
-        Score:  score,
-        Member: order.ID,
-    })
+	s.redis.ZAdd(s.ctx, fmt.Sprintf("orders:user:%d", order.UserID), redis.Z{
+		Score:  score,
+		Member: order.ID,
+	})
 
-    s.redis.ZAdd(s.ctx, "orders:open:"+order.Symbol, redis.Z{
-        Score:  score,
-        Member: order.ID,
-    })
+	s.redis.ZAdd(s.ctx, "orders:open:"+order.Symbol, redis.Z{
+		Score:  score,
+		Member: order.ID,
+	})
 
-    return nil
+	return nil
 }
 
 // ---- StartPipeline ----
@@ -389,6 +391,17 @@ func (s *Store) handleLOBSnapshot(snap models.LOBSnapshot) {
 	s.redis.Set(s.ctx, key, data, 0)
 	s.redis.Publish(s.ctx, key, data)
 	s.redis.Set(s.ctx, "midprice:"+snap.Symbol, fmt.Sprintf("%.4f", snap.MidPrice), 0)
+
+	// Publish lightweight price tick to prices:all for WebSocket streamPrices
+	type PriceTick struct {
+		Symbol   string  `json:"symbol"`
+		MidPrice float64 `json:"mid_price"`
+	}
+	tick, _ := json.Marshal(PriceTick{
+		Symbol:   snap.Symbol,
+		MidPrice: snap.MidPrice,
+	})
+	s.redis.Publish(s.ctx, "prices:all", tick)
 }
 
 // ---- REST API Helpers ----
@@ -418,15 +431,15 @@ func (s *Store) GetRecentTrades(symbol string, n int64) ([]models.TradeMessage, 
 }
 
 func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, error) {
-    view := "candles_1s"
-    if interval == "5s" {
-        view = "candles_5s"
-    }
-    
-    var candles []CandleRecord
-    
-    // Wrap in a subquery to sort Oldest -> Newest for the frontend chart
-    query := fmt.Sprintf(`
+	view := "candles_1s"
+	if interval == "5s" {
+		view = "candles_5s"
+	}
+
+	var candles []CandleRecord
+
+	// Wrap in a subquery to sort Oldest -> Newest for the frontend chart
+	query := fmt.Sprintf(`
         SELECT * FROM (
             SELECT symbol, bucket, open, high, low, close, volume
             FROM %s
@@ -437,8 +450,8 @@ func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, 
         ORDER BY bucket ASC
     `, view)
 
-    err := s.tsdb.Raw(query, symbol, limit).Scan(&candles).Error
-    return candles, err
+	err := s.tsdb.Raw(query, symbol, limit).Scan(&candles).Error
+	return candles, err
 }
 
 func (s *Store) GetOrderByID(orderID string) (*models.Order, error) {
@@ -570,4 +583,97 @@ func (s *Store) GetTradesByUserID(userID uint) ([]TradeRecord, error) {
 			 ORDER BY executed_at DESC`, userID, userID).
 		Scan(&trades).Error
 	return trades, err
+}
+
+// MarketPriceData holds the computed market snapshot for a single symbol.
+type MarketPriceData struct {
+	Symbol    string    `json:"symbol"`
+	Price     float64   `json:"price"`      // current mid price from Redis
+	Change24h float64   `json:"change_24h"` // % change over last 24h
+	Volume24h float64   `json:"volume_24h"` // notional volume (price * qty) over 24h
+	Sparkline []float64 `json:"sparkline"`  // last 8 close prices from candles_5s
+}
+
+func (s *Store) GetMarketPrices(symbols []string, startPrices map[string]float64) []MarketPriceData {
+	results := make([]MarketPriceData, len(symbols))
+
+	var wg sync.WaitGroup
+	for i, symbol := range symbols {
+		wg.Add(1)
+		go func(idx int, sym string) {
+			defer wg.Done()
+			results[idx] = s.fetchSymbolMarketData(sym, startPrices[sym])
+		}(i, symbol)
+	}
+	wg.Wait()
+
+	return results
+}
+
+func (s *Store) fetchSymbolMarketData(symbol string, fallbackPrice float64) MarketPriceData {
+	data := MarketPriceData{Symbol: symbol, Price: fallbackPrice}
+	priceResolved := false
+
+	// 1. Last traded price from Redis ring buffer (fastest, most accurate for ticker)
+	recentRaw, err := s.redis.LIndex(s.ctx, "trades:recent:"+symbol, 0).Result()
+	if err == nil {
+		var lastTrade models.TradeMessage
+		if json.Unmarshal([]byte(recentRaw), &lastTrade) == nil && lastTrade.Price > 0 {
+			data.Price = lastTrade.Price
+			priceResolved = true
+		}
+	}
+
+	// 2. Fallback to mid price if no trades have happened yet (cold start)
+	if !priceResolved {
+		if raw, err := s.redis.Get(s.ctx, "midprice:"+symbol).Result(); err == nil {
+			if p, err := strconv.ParseFloat(raw, 64); err == nil {
+				data.Price = p
+			}
+		}
+	}
+
+	// 3. Sparkline — last 8 closed 5s buckets, reversed to oldest→newest
+	var sparkCandles []CandleRecord
+	s.tsdb.Raw(`
+		SELECT close, bucket
+		FROM candles_5s
+		WHERE symbol = ?
+		ORDER BY bucket DESC
+		LIMIT 8
+	`, symbol).Scan(&sparkCandles)
+
+	data.Sparkline = make([]float64, len(sparkCandles))
+	for i, c := range sparkCandles {
+		data.Sparkline[len(sparkCandles)-1-i] = c.Close
+	}
+
+	// 4. 24h stats from candles_5s — open price and notional volume
+	type Stats struct {
+		Open24h   float64 `gorm:"column:open_24h"`
+		Volume24h float64 `gorm:"column:volume_24h"`
+	}
+	var stats Stats
+	s.tsdb.Raw(`
+		SELECT
+			FIRST(open, bucket)   AS open_24h,
+			SUM(volume * close)   AS volume_24h
+		FROM candles_5s
+		WHERE symbol = ?
+		  AND bucket > NOW() - INTERVAL '24 hours'
+	`, symbol).Scan(&stats)
+
+	data.Volume24h = stats.Volume24h
+
+	// 5. % change: (last_traded - open_24h) / open_24h * 100
+	if stats.Open24h > 0 {
+		data.Change24h = ((data.Price - stats.Open24h) / stats.Open24h) * 100
+	}
+
+	// 6. Cold start fallback — no candle data yet
+	if len(data.Sparkline) == 0 && data.Price > 0 {
+		data.Sparkline = []float64{data.Price}
+	}
+
+	return data
 }
