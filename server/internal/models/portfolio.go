@@ -20,7 +20,7 @@ type Holding struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	PortfolioID uint           `gorm:"index;not null" json:"portfolio_id"`
 	Symbol      string         `gorm:"not null" json:"symbol"`
-	Quantity    int            `gorm:"not null" json:"quantity"`
+	Quantity    int64            `gorm:"not null" json:"quantity"`
 	AvgPrice    float64        `json:"avg_price"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
