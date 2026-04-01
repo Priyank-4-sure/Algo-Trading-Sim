@@ -14,16 +14,16 @@ interface TradeRecord {
 }
 
 const TRADE_HISTORY: TradeRecord[] = [
-  { id: 1, symbol: 'BTC/USD', side: 'Buy', price: 62450, quantity: 0.45, total: 28102.50, pnl: 801.22, date: '2024-03-24', time: '14:32' },
-  { id: 2, symbol: 'ETH/USD', side: 'Sell', price: 3450, quantity: 2.12, total: 7314.00, pnl: 147.97, date: '2024-03-23', time: '09:15' },
-  { id: 3, symbol: 'SOL/USD', side: 'Buy', price: 152, quantity: 45, total: 6840.00, pnl: -159.75, date: '2024-03-22', time: '16:48' },
-  { id: 4, symbol: 'BTC/USD', side: 'Sell', price: 63100, quantity: 0.25, total: 15775.00, pnl: 520.40, date: '2024-03-21', time: '11:22' },
-  { id: 5, symbol: 'AVAX/USD', side: 'Buy', price: 28, quantity: 80, total: 2240.00, pnl: 608.00, date: '2024-03-20', time: '08:05' },
-  { id: 6, symbol: 'LINK/USD', side: 'Buy', price: 12, quantity: 150, total: 1800.00, pnl: 427.50, date: '2024-03-19', time: '13:40' },
-  { id: 7, symbol: 'ETH/USD', side: 'Buy', price: 3280, quantity: 3.5, total: 11480.00, pnl: 350.70, date: '2024-03-18', time: '10:12' },
-  { id: 8, symbol: 'SOL/USD', side: 'Sell', price: 145, quantity: 20, total: 2900.00, pnl: -85.00, date: '2024-03-17', time: '15:33' },
-  { id: 9, symbol: 'BTC/USD', side: 'Buy', price: 61200, quantity: 0.15, total: 9180.00, pnl: 454.58, date: '2024-03-16', time: '07:55' },
-  { id: 10, symbol: 'DOT/USD', side: 'Buy', price: 7.20, quantity: 200, total: 1440.00, pnl: -76.00, date: '2024-03-15', time: '12:18' },
+  { id: 1, symbol: 'BTC/INR', side: 'Buy', price: 62450, quantity: 0.45, total: 28102.50, pnl: 801.22, date: '2024-03-24', time: '14:32' },
+  { id: 2, symbol: 'ETH/INR', side: 'Sell', price: 3450, quantity: 2.12, total: 7314.00, pnl: 147.97, date: '2024-03-23', time: '09:15' },
+  { id: 3, symbol: 'SOL/INR', side: 'Buy', price: 152, quantity: 45, total: 6840.00, pnl: -159.75, date: '2024-03-22', time: '16:48' },
+  { id: 4, symbol: 'BTC/INR', side: 'Sell', price: 63100, quantity: 0.25, total: 15775.00, pnl: 520.40, date: '2024-03-21', time: '11:22' },
+  { id: 5, symbol: 'AVAX/INR', side: 'Buy', price: 28, quantity: 80, total: 2240.00, pnl: 608.00, date: '2024-03-20', time: '08:05' },
+  { id: 6, symbol: 'LINK/INR', side: 'Buy', price: 12, quantity: 150, total: 1800.00, pnl: 427.50, date: '2024-03-19', time: '13:40' },
+  { id: 7, symbol: 'ETH/INR', side: 'Buy', price: 3280, quantity: 3.5, total: 11480.00, pnl: 350.70, date: '2024-03-18', time: '10:12' },
+  { id: 8, symbol: 'SOL/INR', side: 'Sell', price: 145, quantity: 20, total: 2900.00, pnl: -85.00, date: '2024-03-17', time: '15:33' },
+  { id: 9, symbol: 'BTC/INR', side: 'Buy', price: 61200, quantity: 0.15, total: 9180.00, pnl: 454.58, date: '2024-03-16', time: '07:55' },
+  { id: 10, symbol: 'DOT/INR', side: 'Buy', price: 7.20, quantity: 200, total: 1440.00, pnl: -76.00, date: '2024-03-15', time: '12:18' },
 ];
 
 export function HistoryPage() {
@@ -32,15 +32,38 @@ export function HistoryPage() {
   const [dateFilter, setDateFilter] = useState('');
 
   const filteredTrades = TRADE_HISTORY.filter(t => {
-    if (searchQuery && !t.symbol.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    // 1. Format date to DD/MM/YYYY once for checking
+    const formattedDate = t.date.split('-').reverse().join('/');
+    
+    // 2. Generic Search Check
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!t.symbol.toLowerCase().includes(q) && !t.side.toLowerCase().includes(q)) return false;
+    }
+    
+    // 3. Smart Date Filter Check
+    // Replaces dashes with slashes so if user types "03-2024" it still works like "03/2024"
+    if (dateFilter) {
+      const safeDateQuery = dateFilter.replace(/-/g, '/');
+      if (!formattedDate.includes(safeDateQuery)) return false;
+    }
+
+    // 4. Buy/Sell Filter Check
     if (filter === 'buys') return t.side === 'Buy';
     if (filter === 'sells') return t.side === 'Sell';
-    if (dateFilter && t.date !== dateFilter) return false;
+    
     return true;
   });
 
   const handleExport = () => {
-    alert('Exporting CSV... (Simulated)');
+    // Minimalist CSV Export
+    const csv = ['Date,Symbol,Side,Price,Qty,Total,P&L']
+      .concat(filteredTrades.map(t => `${t.date.split('-').reverse().join('/')},${t.symbol},${t.side},${t.price},${t.quantity},${t.total},${t.pnl}`))
+      .join('\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    link.download = 'trade_history.csv';
+    link.click();
   };
 
   const totalPnL = filteredTrades.reduce((sum, t) => sum + t.pnl, 0);
@@ -55,7 +78,7 @@ export function HistoryPage() {
           <div className="glass-panel rounded-lg p-3 h-full">
             <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1"><ArrowUpRight size={12}/> Total P&L</div>
             <div className={`text-xl font-bold font-mono ${totalPnL >= 0 ? 'text-up' : 'text-down'}`}>
-              {totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}
+              {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toFixed(2)}
             </div>
           </div>
         </div>
@@ -79,25 +102,32 @@ export function HistoryPage() {
           <div className="px-3 py-2 border-b border-main flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
             <span className="font-semibold text-sm">Trade History ({filteredTrades.length} trades)</span>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
+              
+              {/* Asset Search */}
               <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
                 <Search size={12} className="text-muted" />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search asset..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-main text-sm outline-none w-full sm:w-20 placeholder:text-muted"
+                  className="bg-transparent text-main text-sm outline-none w-full sm:w-24 placeholder:text-muted"
                 />
               </div>
+
+              {/* SMART DATE FILTER */}
               <div className="flex items-center bg-main/50 rounded px-2 py-1 border border-main gap-1.5 flex-1 sm:flex-none focus-within:border-white/50 transition-colors">
                 <Calendar size={12} className="text-muted" />
                 <input
-                  type="date"
+                  type="text"
+                  placeholder="DD/MM/YYYY, MM/YYYY, or YYYY"
                   value={dateFilter}
                   onChange={e => setDateFilter(e.target.value)}
-                  className="bg-transparent text-main text-sm outline-none w-full sm:w-auto placeholder:text-muted cursor-pointer"
+                  // Note: Increased sm:w-36 to sm:w-56 so the placeholder fits nicely
+                  className="bg-transparent text-main text-sm outline-none w-full sm:w-56 placeholder:text-muted/60"
                 />
               </div>
+
               <div className="flex gap-1">
                 {(['all', 'buys', 'sells'] as const).map(f => (
                   <button
@@ -137,7 +167,7 @@ export function HistoryPage() {
                 {filteredTrades.map(trade => (
                   <tr key={trade.id} className="hover:bg-main/30 transition-colors group">
                     <td className="py-2 px-3 text-muted">
-                      <div className="text-sm font-medium">{trade.date}</div>
+                      <div className="text-sm font-medium">{trade.date.split('-').reverse().join('/')}</div>
                       <div className="text-[10px] text-muted/70 font-mono">{trade.time}</div>
                     </td>
                     <td className="py-2 px-2 font-bold text-main text-sm">{trade.symbol}</td>
@@ -148,17 +178,24 @@ export function HistoryPage() {
                       </div>
                     </td>
                     <td className="py-2 px-2 font-mono text-right text-main font-semibold text-sm">
-                      ${trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      ₹{trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </td>
                     <td className="py-2 px-2 font-mono text-right text-muted hidden sm:table-cell text-sm">{trade.quantity}</td>
                     <td className="py-2 px-2 font-mono text-right text-muted hidden md:table-cell text-sm">
-                      ${trade.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      ₹{trade.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className={`py-2 px-3 font-mono text-right font-bold text-sm ${trade.pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                      {trade.pnl >= 0 ? '+' : ''}${Math.abs(trade.pnl).toFixed(2)}
+                      {trade.pnl >= 0 ? '+' : ''}₹{Math.abs(trade.pnl).toFixed(2)}
                     </td>
                   </tr>
                 ))}
+                {filteredTrades.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-muted font-medium">
+                      No trades found matching your filters.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

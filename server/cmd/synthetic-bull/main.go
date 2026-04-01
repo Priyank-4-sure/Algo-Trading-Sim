@@ -47,35 +47,6 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("healthy", time.Now()))
 }
 
-func handleOrder(w http.ResponseWriter, r *http.Request) {
-	var req models.Order
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Invalid JSON", err))
-		return
-	}
-
-	if req.ID == "" || req.Quantity <= 0 {
-		response.WriteJson(w, http.StatusBadRequest, response.GeneralError("Missing ID or invalid Quantity", nil))
-		return
-	}
-
-	// Persist order to Redis before sending to engine
-	if store != nil {
-		store.InsertOrder(req)
-	}
-
-	orderStream <- req
-
-	response.WriteJson(w, http.StatusAccepted, map[string]interface{}{
-		"message":  "Order accepted into queue",
-		"order_id": req.ID,
-		"symbol":   req.Symbol,
-		"status":   "QUEUED",
-		"details":  req,
-	})
-}
-
 // --------------------
 // Main
 // --------------------
@@ -134,8 +105,13 @@ func main() {
 	//    snapshot is already published by storage.handleLOBSnapshot via lobStream.
 	go func() {
 		for trade := range tradeStream {
-			// log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f",
-				// trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price)
+			log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f of user %d (maker) and user %d (taker)",
+			trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price, trade.MakerUserID, trade.TakerUserID)
+
+			err := apphandlers.UpdatePortfolioAfterTrade(trade)
+			if err != nil {
+				log.Printf("⚠️ Failed to update portfolios after trade: %v", err)
+			}
 
 			// Persist trade to TimescaleDB + update Redis candle + ring buffer
 			store.HandleTrade(trade)
@@ -208,17 +184,16 @@ func main() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			for _, sym := range activeSymbols {
-				price := marketManager.GetPrice(sym)
-				log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
-			}
+			// for _, sym := range activeSymbols {
+			// 	price := marketManager.GetPrice(sym)
+			// 	log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
+			// }
 		}
 	}()
 
 	// 12. Register routes
 	r.Get("/ping", pingHandler)
 	r.Get("/health", healthHandler)
-	r.Post("/order", handleOrder)
 
 	// 13. HTTP server
 	address := ":" + strconv.Itoa(cfg.Server.Port)

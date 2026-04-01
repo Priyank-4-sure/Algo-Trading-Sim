@@ -1,16 +1,25 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { ChartPanel, OrderBook, Balances, OrderForm } from '../panels';
-import { Maximize2, X } from 'lucide-react';
+import { Maximize2, X, ChevronDown } from 'lucide-react';
+import { DashboardContextType } from '../layouts/Layout'; // Adjust path if your Layout is elsewhere
 
 interface TradePageProps {
   darkMode: boolean;
 }
 
 export function TradePage({ darkMode }: TradePageProps) {
+  // 1. Grab all our dynamic data from the Layout context
+  const { activeSymbol, setActiveSymbol, markets, positions } = useOutletContext<DashboardContextType>();
+
+  // 2. Find the currently active market so we can display its % change
+  // Fallback to the first market just in case it's still loading
+  const activeIndexData = markets.find(m => m.symbol === activeSymbol) || markets[0];
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [timeframe, setTimeframe] = useState('1m');
 
-  // Custom Resizability
+  // Custom Resizability State
   const [leftWidth, setLeftWidth] = useState(20);
   const [rightWidth, setRightWidth] = useState(25);
   const [chartHeight, setChartHeight] = useState(70);
@@ -76,8 +85,11 @@ export function TradePage({ darkMode }: TradePageProps) {
         className="hidden md:flex flex-col pr-[2px] h-full min-w-[150px]"
       >
         <div className="flex-1 glass-panel rounded-lg flex flex-col overflow-hidden">
-          <div className="px-3 py-2 border-b border-main font-semibold text-sm">Order Book</div>
+          <div className="px-3 py-2 border-b border-main font-semibold text-sm">
+            Order Book ({activeSymbol})
+          </div>
           <div className="flex-1 px-2 pt-2 overflow-hidden flex flex-col no-scrollbar">
+            {/* Pass the active symbol to the OrderBook component */}
             <OrderBook />
           </div>
         </div>
@@ -105,10 +117,30 @@ export function TradePage({ darkMode }: TradePageProps) {
           >
             <div className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${isFullscreen ? 'rounded-none border-none bg-panel' : 'glass-panel rounded-lg'}`}>
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  BTC/USD
-                  <span className="text-up text-xs font-medium">+2.45%</span>
-                </span>
+                
+                {/* Dynamic Dropdown to switch between indices */}
+                <div className="flex items-center gap-2 relative group cursor-pointer">
+                  <select 
+                    value={activeSymbol}
+                    onChange={(e) => setActiveSymbol(e.target.value)}
+                    className="appearance-none bg-transparent hover:bg-panel/50 outline-none pr-6 py-1 pl-2 rounded cursor-pointer font-bold"
+                  >
+                    {markets.map(market => (
+                      <option key={market.symbol} value={market.symbol} className="bg-background text-foreground">
+                        {market.symbol}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-2 pointer-events-none text-muted" />
+                  
+                  {/* Safely display the change percentage based on the active market */}
+                  {activeIndexData && (
+                    <span className={`text-xs font-medium ${activeIndexData.isPositive ? 'text-up' : 'text-down'}`}>
+                      {activeIndexData.change}
+                    </span>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-3">
                   <div className="flex gap-1 font-medium overflow-x-auto no-scrollbar">
                     {timeframes.map(tf => (
@@ -131,6 +163,7 @@ export function TradePage({ darkMode }: TradePageProps) {
                 </div>
               </div>
               <div className="flex-1 p-0 flex items-center justify-center relative bg-panel min-h-0">
+                {/* Pass the active symbol down to the ChartPanel */}
                 <ChartPanel darkMode={darkMode} timeframe={timeframe} />
               </div>
             </div>
@@ -150,8 +183,12 @@ export function TradePage({ darkMode }: TradePageProps) {
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
                 <span>Positions</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted font-normal">3 Open</span>
-                  <button className="text-[10px] px-3 py-1.5 rounded-md bg-down text-white hover:brightness-110 transition-colors font-bold shadow-sm">Close All</button>
+                  <span className="text-xs text-muted font-normal">{positions.length} Open</span>
+                  {positions.length > 0 && (
+                    <button className="text-[10px] px-3 py-1.5 rounded-md bg-down text-white hover:brightness-110 transition-colors font-bold shadow-sm">
+                      Close All
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex-1 p-2 flex flex-col overflow-y-auto overflow-x-auto text-sm no-scrollbar">
@@ -168,27 +205,35 @@ export function TradePage({ darkMode }: TradePageProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-main/50">
-                    {[
-                      { symbol: 'BTC/USD', side: 'Long', size: '0.450', entry: '62,450.00', mark: '64,230.50', pnl: '+801.22', roe: '+3.2%', isPositive: true },
-                      { symbol: 'ETH/USD', side: 'Short', size: '2.120', entry: '3,450.00', mark: '3,380.20', pnl: '+147.97', roe: '+2.1%', isPositive: true },
-                      { symbol: 'SOL/USD', side: 'Long', size: '45.00', entry: '152.00', mark: '148.45', pnl: '-159.75', roe: '-2.4%', isPositive: false },
-                    ].map((pos, i) => (
-                      <tr key={i} className="group hover:bg-panel/50 transition-colors">
-                        <td className="py-2.5 font-bold text-main">{pos.symbol}</td>
-                        <td className={`py-2.5 ${pos.side === 'Long' ? 'text-up' : 'text-down'}`}>{pos.side}</td>
-                        <td className="py-2.5 font-mono">{pos.size}</td>
-                        <td className="py-2.5 font-mono text-muted">{pos.entry}</td>
-                        <td className="py-2.5 font-mono text-muted">{pos.mark}</td>
-                        <td className={`py-2.5 text-right font-mono font-bold ${pos.isPositive ? 'text-up' : 'text-down'}`}>
-                          {pos.pnl} <span className="text-[10px] opacity-70 ml-1">({pos.roe})</span>
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <button className="text-[10px] px-3 py-1.5 rounded-md bg-down/20 text-down hover:bg-down/40 transition-colors font-bold shadow-sm">
-                            Close
-                          </button>
-                        </td>
+                    {positions.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-muted">No open positions</td>
                       </tr>
-                    ))}
+                    ) : (
+                      positions.map((pos) => (
+                        <tr 
+                          key={pos.id} 
+                          className={`group transition-colors ${pos.symbol === activeSymbol ? 'bg-panel/80' : 'hover:bg-panel/50'}`}
+                        >
+                          <td className="py-2.5 font-bold text-main">
+                            {pos.symbol}
+                            {pos.symbol === activeSymbol && <span className="ml-2 text-[10px] text-muted">(Active)</span>}
+                          </td>
+                          <td className={`py-2.5 ${pos.side === 'Long' ? 'text-up' : 'text-down'}`}>{pos.side}</td>
+                          <td className="py-2.5 font-mono">{pos.size}</td>
+                          <td className="py-2.5 font-mono text-muted">{pos.entryPrice}</td>
+                          <td className="py-2.5 font-mono text-muted">{pos.markPrice}</td>
+                          <td className={`py-2.5 text-right font-mono font-bold ${pos.isPositive ? 'text-up' : 'text-down'}`}>
+                            {pos.pnl} <span className="text-[10px] opacity-70 ml-1">({pos.roe})</span>
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <button className="text-[10px] px-3 py-1.5 rounded-md bg-down/20 text-down hover:bg-down/40 transition-colors font-bold shadow-sm">
+                              Close
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -217,6 +262,7 @@ export function TradePage({ darkMode }: TradePageProps) {
             className="pb-[2px] shrink-0"
           >
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
+              {/* Pass active symbol to OrderForm */}
               <OrderForm />
             </div>
           </div>
@@ -231,6 +277,7 @@ export function TradePage({ darkMode }: TradePageProps) {
 
           <div className="flex-1 min-h-0 pt-[2px]">
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
+              {/* Pass active symbol to Balances */}
               <Balances />
             </div>
           </div>
