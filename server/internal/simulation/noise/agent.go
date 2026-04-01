@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"time"
+	"math"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
@@ -103,11 +104,28 @@ func (a *Agent) Start(ctx context.Context, symbols []string, sessionDuration tim
 					orderPrice := 0.0
 
 					if a.rng.Float64() > 0.70 {
-						orderType = models.Limit
-						// Add a tiny random offset to the current price for the limit order
-						offset := state.marketPrice * 0.001 * a.rng.NormFloat64()
-						orderPrice = state.marketPrice + offset
-					}
+            orderType = models.Limit
+            
+            // 1. Calculate the base tick size using Basis Points
+            baseTickPct := 0.0005
+            tickSize := state.marketPrice * baseTickPct
+            
+            // 2. Use a continuous float multiplier (between 1.0x and 5.0x)
+            // This perfectly mimics the Market Maker's organic gap logic!
+            distanceMultiplier := 1.0 + (a.rng.Float64() * 4.0)
+            tickOffset := tickSize * distanceMultiplier
+            
+            // 3. Apply the offset based on the side
+            if models.Side(side) == models.Buy {
+                orderPrice = state.marketPrice - tickOffset
+            } else {
+                orderPrice = state.marketPrice + tickOffset
+            }
+
+            // 4. CRITICAL: Snap the final float to the exact 2-decimal grid 
+            // so it stacks perfectly with the Market Maker's orders.
+            orderPrice = math.Round(orderPrice*100) / 100
+          }
 
 					order := models.Order{
 						ID:        generateOrderID(sym),

@@ -203,7 +203,7 @@ func (e *Engine) cancelOrder(order models.Order, book *OrderBook) {
 		side.RemovePriceLevel(price)
 	}
 
-	log.Printf("Cancelled Order: %s", order.ID)
+	// log.Printf("Cancelled Order: %s", order.ID)
 }
 
 // ---- Helpers ----

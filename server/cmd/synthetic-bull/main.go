@@ -106,7 +106,7 @@ func main() {
 	go func() {
 		for trade := range tradeStream {
 			log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f of user %d (maker) and user %d (taker)",
-			trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price, trade.MakerUserID, trade.TakerUserID)
+				trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price, trade.MakerUserID, trade.TakerUserID)
 
 			err := apphandlers.UpdatePortfolioAfterTrade(trade)
 			if err != nil {
@@ -144,6 +144,7 @@ func main() {
 		Symbol     string  `json:"symbol"`
 		Class      string  `json:"class"`
 		StartPrice float64 `json:"start_price"`
+		Active   bool    `json:"isActive"`
 	}
 	if err := json.Unmarshal(assetFile, &configuredAssets); err != nil {
 		log.Fatal("❌ Failed to parse assets.json: ", err)
@@ -153,6 +154,9 @@ func main() {
 	ctxBackground := context.Background()
 
 	for _, a := range configuredAssets {
+		if !a.Active {
+			continue
+		}
 		// Add to simulation engine
 		marketManager.AddAsset(a.Symbol, a.Class, a.StartPrice)
 		activeSymbols = append(activeSymbols, a.Symbol)
@@ -166,7 +170,7 @@ func main() {
 		}
 		metaJSON, _ := json.Marshal(assetMetadata)
 		dbConnections.Redis.HSet(ctxBackground, "market:assets", a.Symbol, metaJSON)
-				// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
+		// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -184,10 +188,10 @@ func main() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			// for _, sym := range activeSymbols {
-			// 	price := marketManager.GetPrice(sym)
-			// 	log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
-			// }
+			for _, sym := range activeSymbols {
+				price := marketManager.GetPrice(sym)
+				log.Printf("📊 [GBM FAIR VALUE] %s: ₹%.4f", sym, price)
+			}
 		}
 	}()
 

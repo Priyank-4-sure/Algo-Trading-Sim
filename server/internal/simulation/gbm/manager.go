@@ -39,7 +39,22 @@ func (m *MarketManager) AddAsset(ticker, assetClass string, startPrice float64) 
 
 	// 1. Generate the unique DNA and math engine
 	profile := NewProfileFactory(assetClass)
-	gen := NewGenerator(startPrice, 0.0, 0.1, 0.00000000317)
+
+	// 2. Calculate the initial Drift and Volatility based on the profile's "Normal" state!
+	initialDriftBounds := profile.DriftBounds[NormalDrift]
+	initialDrift := randomBetween(initialDriftBounds[0], initialDriftBounds[1])
+
+	initialVolBounds := profile.SigmaBounds[NormalVol]
+	initialVol := randomBetween(initialVolBounds[0], initialVolBounds[1])
+	gen := NewGenerator(startPrice, initialDrift, initialVol, 0.00000000317)
+
+																				// 0.1 second (1x): 0.00000000317
+																				// 1 second (10x): 0.0000000317
+																				// 2 seconds (20x): 0.0000000634
+																				// 5 seconds (50x): 0.0000001585
+																				// 10 seconds (100x): 0.000000317
+																				// 20 seconds (200x): 0.000000634
+																				// 1 minute (600x): 0.000001902
 
 	asset := &ManagedAsset{
 		Ticker:       ticker,
@@ -52,7 +67,7 @@ func (m *MarketManager) AddAsset(ticker, assetClass string, startPrice float64) 
 
 	m.assets[ticker] = asset
 
-	// 2. Start the macro/micro physics and the price generator loops
+	// 3. Start the macro/micro physics and the price generator loops
 	go m.manageDriftLifecycle(asset)
 	go m.manageVolatilityLifecycle(asset)
 	go m.runPriceGenerator(asset)

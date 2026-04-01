@@ -64,6 +64,7 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 			Type:  models.Cancel,
 			Side:  oldOrder.Side,
 			Price: oldOrder.Price,
+			Symbol: symbol,
 		}
 		mm.orderStream <- cancelReq
 	}
