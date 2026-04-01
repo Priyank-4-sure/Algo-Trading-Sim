@@ -140,6 +140,29 @@ func (e *Engine) match(taker models.Order, side *OrderSide) int64 {
 
 		for node := queue.Front(); node != nil && remaining > 0; node = queue.Front() {
 			maker := &node.Order
+
+			// -----------------------------------------------------------
+			// NEW: Self-Trade Prevention (STP)
+			// If the taker and maker are the exact same user ID, block it!
+			// -----------------------------------------------------------
+			if maker.UserID != 0 && maker.UserID == taker.UserID {
+				log.Printf("🛡️ STP TRIGGERED: Prevented User %d from trading with itself on %s", taker.UserID, taker.Symbol)
+
+				// Emit Event: Volume Removed due to STP cancellation
+				e.EventStream <- models.MarketEvent{
+					Type:     models.EventVolumeRemoved,
+					Symbol:   taker.Symbol,
+					Side:     maker.Side,
+					Price:    bestPrice,
+					Quantity: maker.Quantity,
+				}
+
+				queue.PopFront()
+				delete(e.OrderIndex, maker.ID)
+				continue // Skip to the next order in the queue
+			}
+			// -----------------------------------------------------------
+
 			tradeQty := min(remaining, maker.Quantity)
 
 			e.TradeStream <- models.TradeMessage{
@@ -203,7 +226,7 @@ func (e *Engine) cancelOrder(order models.Order, book *OrderBook) {
 		side.RemovePriceLevel(price)
 	}
 
-	log.Printf("Cancelled Order: %s", order.ID)
+	// log.Printf("Cancelled Order: %s", order.ID)
 }
 
 // ---- Helpers ----
@@ -216,7 +239,7 @@ func min(a, b int64) int64 {
 }
 
 // ---- Time Complexities ----
-// Add order:     O(1) existing price level | O(log P) new price level (BST insert)
-// Cancel order:  O(1) via OrderIndex lookup
-// Match orders:  O(K + L log P) — K trades executed, L price levels traversed
-// LOB snapshot:  O(P) — one BST Slice() traversal + O(N) VolumeAt per level
+// Add order:    O(1) existing price level | O(log P) new price level (BST insert)
+// Cancel order: O(1) via OrderIndex lookup
+// Match orders: O(K + L log P) — K trades executed, L price levels traversed
+// LOB snapshot: O(P) — one BST Slice() traversal + O(N) VolumeAt per level
