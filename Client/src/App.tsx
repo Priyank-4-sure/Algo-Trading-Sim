@@ -6,32 +6,31 @@ import {
   Outlet 
 } from 'react-router-dom';
 
-// --- Imports stay the same ---
 import { Layout } from './components/layouts';
 import { TradePage } from './components/pages/TradePage';
 import { MarketsPage } from './components/pages/MarketsPage';
 import { PortfolioPage } from './components/pages/PortfolioPage';
 import { AnalyticsPage } from './components/pages/AnalyticsPage';
 import { HistoryPage } from './components/pages/HistoryPage';
-import { LandingPage } from './components/pages/LandingPage.tsx';
+import { LandingPage } from './components/pages/LandingPage'; 
 import { LoginPage } from './components/pages/LoginPage';
 import { SignUpPage } from './components/pages/SignUpPage';
+import { WatchlistPage } from './components/pages/WatchlistPage';
 import { useAuth } from './hooks/useAuth';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const { isAuthenticated, loading, logout } = useAuth();
 
-  // Memoize the toggle function so it doesn't trigger unnecessary re-renders
   const toggleDarkMode = useCallback(() => setDarkMode(prev => !prev), []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
-  // ─── REACT ROUTER CONFIGURATION ────────────────────────────────
-  // Wrapped in useMemo to prevent the router from re-initializing every time state changes.
-  // This must remain ABOVE the `if (loading)` block to obey React Hook rules.
+  // ─── ROUTER CONFIGURATION (Incoming Change Priority) ─────────────
+  // We use createBrowserRouter as per the develop branch for better performance
+  // and access to data APIs.
   const router = useMemo(() => createBrowserRouter([
     {
       path: "/",
@@ -54,11 +53,9 @@ export default function App() {
       )
     },
     {
-      // The Dashboard "Shell"
       path: "/app",
       element: isAuthenticated ? (
         <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={logout}>
-          {/* The Outlet renders whatever child route is active */}
           <Outlet /> 
         </Layout>
       ) : (
@@ -68,6 +65,7 @@ export default function App() {
         { index: true, element: <Navigate to="trade" replace /> },
         { path: "trade", element: <TradePage darkMode={darkMode} /> },
         { path: "markets", element: <MarketsPage /> },
+        { path: "watchlist", element: <WatchlistPage /> }, // Integrated from HEAD
         { path: "analytics", element: <AnalyticsPage /> },
         { path: "portfolio", element: <PortfolioPage /> },
         { path: "history", element: <HistoryPage /> },
@@ -75,7 +73,7 @@ export default function App() {
     }
   ]), [darkMode, isAuthenticated, logout, toggleDarkMode]);
 
-  // Loading state handled AFTER all hooks are called
+  // Loading state handled after the hook definition to avoid "Rules of Hooks" violations
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">

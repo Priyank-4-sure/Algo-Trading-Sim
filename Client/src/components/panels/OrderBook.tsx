@@ -1,6 +1,11 @@
 import { useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { DashboardContextType } from '../layouts/Layout';
 
 export function OrderBook() {
+
+  const { activeSymbol } = useOutletContext<DashboardContextType>();
+
   const asks = useMemo(() => Array.from({ length: 15 }).map((_, i) => ({
     price: 64230.50 + (14 - i) * 2.5,
     amount: (Math.random() * 2).toFixed(4),
@@ -18,7 +23,7 @@ export function OrderBook() {
   return (
     <div className="flex flex-col h-full bg-panel w-full text-xs font-mono select-none">
       <div className="flex justify-between text-muted mb-2 px-1 text-[10px] font-sans font-medium uppercase tracking-wider">
-        <span>Price (USD)</span>
+        <span>Price (INR)</span>
         <span>Amount</span>
         <span>Total</span>
       </div>

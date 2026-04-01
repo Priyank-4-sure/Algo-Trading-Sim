@@ -1,31 +1,44 @@
-import { Moon, Sun, Search, Bell, ChevronDown, LogOut, User, ChevronRight } from 'lucide-react';
+import { 
+  Moon, Sun, Search, Bell, ChevronDown, LogOut, User, ChevronRight,
+  BarChart2, PieChart, Star, History, LineChart, Activity // Added new icons for page titles
+} from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; // <-- NEW: Import useLocation
+import { MarketPair } from '../../data/mockData'; 
 
 interface TopNavProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
   onLogout: () => void;
-  onProfileClick: () => void; // <-- Added Prop to route to Portfolio
+  onProfileClick: () => void;
+  activeSymbol: string; 
+  onSymbolChange: (symbol: string) => void;
+  markets: MarketPair[]; 
 }
 
-export function TopNav({ darkMode, toggleDarkMode, onLogout, onProfileClick }: TopNavProps) {
+export function TopNav({ 
+  darkMode, 
+  toggleDarkMode, 
+  onLogout, 
+  onProfileClick, 
+  activeSymbol, 
+  onSymbolChange,
+  markets 
+}: TopNavProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false); // <-- Added Profile State
-  const [selectedPair, setSelectedPair] = useState('BTC/USD');
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const pickerRef = useRef<HTMLDivElement>(null);
-  const profileRef = useRef<HTMLDivElement>(null); // <-- Added Profile Ref
+  const profileRef = useRef<HTMLDivElement>(null);
+  
+  // --- NEW: Get current route to determine what to show ---
+  const location = useLocation();
+  const isTradePage = location.pathname.includes('/trade');
 
-  const pairs = [
-    { symbol: 'BTC/USD', name: 'Bitcoin', price: '$64,230.50', change: '+2.45%', icon: '₿', iconColor: 'bg-up' },
-    { symbol: 'ETH/USD', name: 'Ethereum', price: '$3,380.20', change: '-1.12%', icon: 'Ξ', iconColor: 'bg-main border border-main' },
-    { symbol: 'SOL/USD', name: 'Solana', price: '$148.45', change: '+5.20%', icon: 'S', iconColor: 'bg-main border border-main' },
-    { symbol: 'AAPL', name: 'Apple Inc.', price: '$189.45', change: '+0.45%', icon: '', iconColor: 'bg-main border border-main' },
-    { symbol: 'TSLA', name: 'Tesla Inc.', price: '$175.22', change: '-2.30%', icon: 'T', iconColor: 'bg-down' },
-  ];
+  const currentPair = markets.find(p => p.symbol === activeSymbol) || markets[0];
 
-  const filteredPairs = pairs.filter(p =>
+  const filteredPairs = markets.filter(p =>
     p.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -43,104 +56,134 @@ export function TopNav({ darkMode, toggleDarkMode, onLogout, onProfileClick }: T
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // --- NEW: Helper to render the correct title/icon for non-trade pages ---
+  const getPageContext = () => {
+    if (location.pathname.includes('/markets')) return { title: 'Markets Overview', icon: <BarChart2 size={18} /> };
+    if (location.pathname.includes('/watchlist')) return { title: 'My Watchlist', icon: <Star size={18} /> };
+    if (location.pathname.includes('/portfolio')) return { title: 'Portfolio', icon: <PieChart size={18} /> };
+    if (location.pathname.includes('/analytics')) return { title: 'Analytics Dashboard', icon: <LineChart size={18} /> };
+    if (location.pathname.includes('/history')) return { title: 'Trade History', icon: <History size={18} /> };
+    return { title: 'Dashboard', icon: <Activity size={18} /> };
+  };
+
+  const pageContext = getPageContext();
+
   return (
     <header className="h-12 border-b border-main bg-panel flex items-center justify-between px-4 shrink-0 shadow-sm z-50 transition-colors font-sans">
       <div className="flex items-center gap-4">
-        {/* NextBull Logo */}
+        {/* NextBull Logo - Always visible */}
         <div className="flex items-center gap-1 pr-4 border-r border-main">
           <span className="text-main font-black text-2xl tracking-tighter font-display">N</span>
           <span className="text-main font-extrabold tracking-[0.2em] text-sm font-display hidden sm:inline">EXTBULL</span>
         </div>
 
-        {/* Premium Coin Picker */}
-        <div className="relative" ref={pickerRef}>
-          <button
-            onClick={() => setIsPickerOpen(!isPickerOpen)}
-            className={`flex items-center gap-3 w-56 px-3 py-1.5 rounded-md border transition-all duration-200 group
-              ${isPickerOpen
-                ? 'border-white bg-main'
-                : 'border-main bg-main/50 hover:border-white/50'}`}
-          >
-            <Search size={14} className={`${isPickerOpen ? 'text-main' : 'text-muted group-hover:text-main'}`} />
-            <span className="flex-1 text-left text-sm font-bold text-main">{selectedPair}</span>
-            <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
-          </button>
+        {/* --- CONDITIONAL RENDERING --- */}
+        {isTradePage ? (
+          <>
+            {/* Premium Coin Picker (Trade Page Only) */}
+            <div className="relative" ref={pickerRef}>
+              <button
+                onClick={() => setIsPickerOpen(!isPickerOpen)}
+                className={`flex items-center gap-3 w-56 px-3 py-1.5 rounded-md border transition-all duration-200 group
+                  ${isPickerOpen
+                    ? 'border-white bg-main'
+                    : 'border-main bg-main/50 hover:border-white/50'}`}
+              >
+                <Search size={14} className={`${isPickerOpen ? 'text-main' : 'text-muted group-hover:text-main'}`} />
+                <span className="flex-1 text-left text-sm font-bold text-main">{activeSymbol}</span>
+                <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-          {isPickerOpen && (
-            <div className="absolute top-full left-0 mt-2 w-80 bg-main border border-main rounded-lg shadow-black/40 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="p-2 border-b border-main">
-                <div className="flex items-center gap-2 bg-panel rounded-md px-3 py-2 border border-main focus-within:border-white transition-colors">
-                  <Search size={14} className="text-muted" />
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Search symbols..."
-                    className="bg-transparent outline-none flex-1 text-sm text-main"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-              </div>
+              {isPickerOpen && (
+                <div className="absolute top-full left-0 mt-2 w-80 bg-main border border-main rounded-lg shadow-black/40 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-2 border-b border-main">
+                    <div className="flex items-center gap-2 bg-panel rounded-md px-3 py-2 border border-main focus-within:border-white transition-colors">
+                      <Search size={14} className="text-muted" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Search symbols..."
+                        className="bg-transparent outline-none flex-1 text-sm text-main"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-              <div className="max-h-80 overflow-y-auto no-scrollbar">
-                <div className="p-2 flex gap-2 border-b border-trading-border">
-                  {['All', 'Crypto', 'Stocks'].map(cat => (
-                    <button key={cat} className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border transition-all ${cat === 'All' ? 'bg-panel border-white text-main' : 'border-main text-muted hover:text-main hover:border-white/50'}`}>{cat}</button>
-                  ))}
+                  <div className="max-h-80 overflow-y-auto no-scrollbar">
+                    <div className="p-2 flex gap-2 border-b border-trading-border">
+                      {['All', 'Crypto', 'Stocks'].map(cat => (
+                        <button key={cat} className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border transition-all ${cat === 'All' ? 'bg-panel border-white text-main' : 'border-main text-muted hover:text-main hover:border-white/50'}`}>{cat}</button>
+                      ))}
+                    </div>
+                    {filteredPairs.map((pair) => (
+                      <button
+                        key={pair.symbol}
+                        onClick={() => {
+                          onSymbolChange(pair.symbol);
+                          setIsPickerOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between p-3 hover:bg-panel transition-colors group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 ${pair.iconColor || 'bg-main border border-main'} rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm transition-transform group-hover:scale-110`}>
+                            {pair.icon}
+                          </div>
+                          <div className="flex flex-col items-start leading-tight">
+                            <span className="font-bold text-sm text-main">{pair.symbol}</span>
+                            <span className="text-xs text-muted">{pair.name}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-xs font-mono font-bold text-main">{pair.price}</span>
+                          <span className={`text-[10px] font-bold ${pair.isPositive ? 'text-up' : 'text-down'}`}>{pair.change}</span>
+                        </div>
+                        {activeSymbol === pair.symbol && <div className="ml-2 w-1.5 h-1.5 rounded-full bg-white" />}
+                      </button>
+                    ))}
+                    {filteredPairs.length === 0 && (
+                      <div className="p-8 text-center text-muted text-sm">No results found for "{searchQuery}"</div>
+                    )}
+                  </div>
                 </div>
-                {filteredPairs.map((pair) => (
-                  <button
-                    key={pair.symbol}
-                    onClick={() => {
-                      setSelectedPair(pair.symbol);
-                      setIsPickerOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between p-3 hover:bg-panel transition-colors group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 ${pair.iconColor} rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm transition-transform group-hover:scale-110`}>
-                        {pair.icon}
-                      </div>
-                      <div className="flex flex-col items-start leading-tight">
-                        <span className="font-bold text-sm text-main">{pair.symbol}</span>
-                        <span className="text-xs text-muted">{pair.name}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-xs font-mono font-bold text-main">{pair.price}</span>
-                      <span className={`text-[10px] font-bold ${pair.change.startsWith('+') ? 'text-up' : 'text-down'}`}>{pair.change}</span>
-                    </div>
-                    {selectedPair === pair.symbol && <div className="ml-2 w-1.5 h-1.5 rounded-full bg-white" />}
-                  </button>
-                ))}
-                {filteredPairs.length === 0 && (
-                  <div className="p-8 text-center text-muted text-sm">No results found for "{searchQuery}"</div>
-                )}
-              </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="flex items-center gap-8 border-l border-main pl-8 ml-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-up font-bold text-base tracking-tight font-mono">$64,230.50</span>
-            <span className="text-xs text-up font-semibold">+2.45%</span>
+            {/* Dynamic header stats (Trade Page Only) */}
+            <div className="flex items-center gap-8 border-l border-main pl-8 ml-2">
+              {currentPair && (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`font-bold text-base tracking-tight font-mono ${currentPair.isPositive ? 'text-up' : 'text-down'}`}>
+                      {currentPair.price}
+                    </span>
+                    <span className={`text-xs font-semibold ${currentPair.isPositive ? 'text-up' : 'text-down'}`}>
+                      {currentPair.change}
+                    </span>
+                  </div>
+                  <div className="hidden lg:flex items-baseline gap-2">
+                    <span className="text-xs text-muted uppercase tracking-wider font-bold">High</span>
+                    <span className="text-sm font-mono font-bold text-muted">{currentPair.high}</span>
+                  </div>
+                  <div className="hidden lg:flex items-baseline gap-2">
+                    <span className="text-xs text-muted uppercase tracking-wider font-bold">Low</span>
+                    <span className="text-sm font-mono font-bold text-muted">{currentPair.low}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          /* --- ALTERNATIVE UI FOR NON-TRADE PAGES --- */
+          <div className="flex items-center gap-2 px-2 text-muted animate-in fade-in slide-in-from-left-2 duration-300">
+            {pageContext.icon}
+            <span className="font-bold text-main tracking-tight">{pageContext.title}</span>
           </div>
-          <div className="hidden lg:flex items-baseline gap-2">
-            <span className="text-xs text-muted uppercase tracking-wider font-bold">High</span>
-            <span className="text-sm font-mono font-bold text-muted">$65,100.00</span>
-          </div>
-          <div className="hidden lg:flex items-baseline gap-2">
-            <span className="text-xs text-muted uppercase tracking-wider font-bold">Low</span>
-            <span className="text-sm font-mono font-bold text-muted">$62,400.00</span>
-          </div>
-        </div>
+        )}
       </div>
 
+      {/* Right Side Settings (Always visible) */}
       <div className="flex items-center gap-3">
-        <button className="p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main">
-          <Bell size={18} />
-        </button>
         <button
           onClick={toggleDarkMode}
           className="p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main"

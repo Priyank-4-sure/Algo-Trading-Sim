@@ -9,15 +9,14 @@ export function OrderForm() {
    const [amount, setAmount] = useState(0);
 
    const pendingOrders = [
-      { id: 1, symbol: 'BTC/USD', side: 'Buy', amount: 0.15, type: 'Limit', price: 61200.00 },
-      { id: 2, symbol: 'ETH/USD', side: 'Sell', amount: 2.5, type: 'Stop-Limit', price: 3500.00 }
+      { id: 1, symbol: 'BTC/INR', side: 'Buy', amount: 0.15, type: 'Limit', price: 61200.00 },
+      { id: 2, symbol: 'ETH/INR', side: 'Sell', amount: 2.5, type: 'Stop-Limit', price: 3500.00 }
    ];
 
    const availableBalance = 13467.82;
    const marketPrice = 64230.50;
    const effectivePrice = type === 'market' ? marketPrice : price;
    const total = amount * effectivePrice;
-
 
    const handleAmountChange = (val: number) => {
      setAmount(Math.floor(val));
@@ -32,7 +31,8 @@ export function OrderForm() {
        total: amount * (type === 'market' ? marketPrice : price),
      };
      console.log('Order placed:', order);
-     alert(`${side.toUpperCase()} ${amount} BTC @ ${type === 'market' ? 'Market' : `$${order.price.toLocaleString()}`}\nTotal: $${order.total.toLocaleString()}`);
+     // Updated alert to use ₹
+     alert(`${side.toUpperCase()} ${amount} BTC @ ${type === 'market' ? 'Market' : `₹${order.price.toLocaleString()}`}\nTotal: ₹${order.total.toLocaleString()}`);
    };
 
    return (
@@ -94,7 +94,7 @@ export function OrderForm() {
                     onChange={e => setStopPrice(Number(e.target.value))}
                     className="bg-transparent flex-1 p-2.5 outline-none text-main min-w-0 font-mono text-sm"
                   />
-                  <span className="px-3 text-muted bg-panel/80 border-l border-main text-xs flex items-center font-medium">USD</span>
+                  <span className="px-3 text-muted bg-panel/80 border-l border-main text-xs flex items-center font-medium">INR</span>
                 </div>
               </div>
             )}
@@ -113,7 +113,7 @@ export function OrderForm() {
                     disabled={type === 'market'}
                     className="bg-transparent flex-1 p-2.5 outline-none text-main min-w-0 disabled:opacity-50 font-mono text-sm"
                   />
-                  <span className="px-3 text-muted bg-panel/80 border-l border-main text-xs flex items-center font-medium">USD</span>
+                  <span className="px-3 text-muted bg-panel/80 border-l border-main text-xs flex items-center font-medium">INR</span>
                </div>
             </div>
 
@@ -134,25 +134,26 @@ export function OrderForm() {
             </div>
 
 
-            {/* Available Balance */}
+            {/* Available Balance - Updated to ₹ */}
             <div className="flex justify-between text-xs text-muted shrink-0">
               <span>Available</span>
-              <span className="font-mono text-main">${availableBalance.toLocaleString()}</span>
+              <span className="font-mono text-main">₹{availableBalance.toLocaleString()}</span>
             </div>
 
-            {/* Total */}
+            {/* Total - Updated to ₹ */}
             <div className="mt-auto flex justify-between text-xs pt-2 border-t border-main mb-2 shrink-0">
                <span className="text-muted font-medium">Total</span>
-               <span className="text-main font-bold font-mono">{total > 0 ? `$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '0.00 USD'}</span>
+               <span className="text-main font-bold font-mono">{total > 0 ? `₹${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '₹0.00'}</span>
             </div>
 
+               {/* Submit Button - Updated to ₹ */}
                <button
                  onClick={handleSubmit}
                  disabled={amount <= 0}
                  className={`w-full py-2.5 rounded-lg font-bold text-white transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${side === 'buy' ? 'bg-up hover:brightness-110' : 'bg-down hover:brightness-110'} shadow-lg shrink-0 text-sm`}
                >
                   {side === 'buy' ? 'Buy' : 'Sell'} BTC
-                  {type !== 'market' && ` @ $${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {type !== 'market' && ` @ ₹${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                </button>
                </div>
                </div>
@@ -175,7 +176,8 @@ export function OrderForm() {
                             </div>
                             <div className="flex flex-col items-end">
                                <span className="text-[10px] text-muted leading-tight">Price</span>
-                               <span className="font-mono text-main font-semibold text-xs">${order.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                               {/* Pending Order Price - Updated to ₹ */}
+                               <span className="font-mono text-main font-semibold text-xs">₹{order.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                          </div>
                          <button className="mt-2 text-[10px] w-full text-center py-1 text-muted hover:text-down hover:bg-down/10 rounded transition-colors uppercase font-bold tracking-wider">
