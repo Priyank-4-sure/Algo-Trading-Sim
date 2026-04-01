@@ -89,29 +89,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.Side == string(models.Sell) {
-		var portfolio models.Portfolio
-		if err := h.DB.Primary.Where("user_id = ?", userID).First(&portfolio).Error; err != nil {
-			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to fetch portfolio", err))
-			return
-		}
-
-		var holding models.Holding
-		err := h.DB.Primary.Where("portfolio_id = ? AND symbol = ?", portfolio.ID, req.Symbol).First(&holding).Error
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				response.WriteJson(w, http.StatusBadRequest, response.GeneralError("insufficient holdings", nil))
-				return
-			}
-			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to fetch holdings", err))
-			return
-		}
-
-		if int64(holding.Quantity) < req.Quantity {
-			response.WriteJson(w, http.StatusBadRequest, response.GeneralError("insufficient holdings", nil))
-			return
-		}
-	}
+	// SELL orders are allowed even without existing holdings to support short selling.
 
 	orderID := strings.TrimSpace(req.ID)
 	if orderID == "" {
