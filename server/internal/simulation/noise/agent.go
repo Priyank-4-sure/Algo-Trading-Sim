@@ -4,13 +4,15 @@ import (
 	"context" // NEW: For graceful shutdown
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"time"
-	"math"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
 )
+
+const NoiseTraderUserID uint = 999999999 // Reserved high-ID to prevent PostgreSQL collisions
 
 type Agent struct {
 	marketManager *gbm.MarketManager
@@ -42,9 +44,9 @@ func (a *Agent) Start(ctx context.Context, symbols []string, sessionDuration tim
 	minOrderSize := 1.0
 	baseDelay := 100 * time.Millisecond
 	minDelayLimit := 1 * time.Millisecond
-	
+
 	// EMA smoothing factor (e.g., 0.1 means new prices have 10% weight)
-	alphaEMA := 0.1 
+	alphaEMA := 0.1
 
 	startTime := time.Now()
 
@@ -66,19 +68,19 @@ func (a *Agent) Start(ctx context.Context, symbols []string, sessionDuration tim
 		case <-ctx.Done():
 			// Graceful shutdown triggered from main.go
 			// log.Println("Noise Trader Agent shutting down...")
-			return 
+			return
 
 		case trade := <-a.tickerTape:
 			if state, exists := states[trade.Symbol]; exists {
 				state.marketPrice = trade.Price
-				// Update EMA smoothly on every trade: 
+				// Update EMA smoothly on every trade:
 				// $EMA_{new} = Price \times \alpha + EMA_{old} \times (1 - \alpha)$
 				state.priceEMA = (trade.Price * alphaEMA) + (state.priceEMA * (1.0 - alphaEMA))
 			}
 
 		case <-evalTicker.C:
 			now := time.Now()
-			
+
 			elapsed := now.Sub(startTime)
 			progress := float64(elapsed) / float64(sessionDuration)
 			if progress > 1.0 {
@@ -104,31 +106,32 @@ func (a *Agent) Start(ctx context.Context, symbols []string, sessionDuration tim
 					orderPrice := 0.0
 
 					if a.rng.Float64() > 0.70 {
-            orderType = models.Limit
-            
-            // 1. Calculate the base tick size using Basis Points
-            baseTickPct := 0.0005
-            tickSize := state.marketPrice * baseTickPct
-            
-            // 2. Use a continuous float multiplier (between 1.0x and 5.0x)
-            // This perfectly mimics the Market Maker's organic gap logic!
-            distanceMultiplier := 1.0 + (a.rng.Float64() * 4.0)
-            tickOffset := tickSize * distanceMultiplier
-            
-            // 3. Apply the offset based on the side
-            if models.Side(side) == models.Buy {
-                orderPrice = state.marketPrice - tickOffset
-            } else {
-                orderPrice = state.marketPrice + tickOffset
-            }
+						orderType = models.Limit
 
-            // 4. CRITICAL: Snap the final float to the exact 2-decimal grid 
-            // so it stacks perfectly with the Market Maker's orders.
-            orderPrice = math.Round(orderPrice*100) / 100
-          }
+						// 1. Calculate the base tick size using Basis Points
+						baseTickPct := 0.0001
+						tickSize := state.marketPrice * baseTickPct
+
+						// 2. Use a continuous float multiplier (between 1.0x and 5.0x)
+						// This perfectly mimics the Market Maker's organic gap logic!
+						distanceMultiplier := 1.0 + (a.rng.Float64() * 4.0)
+						tickOffset := tickSize * distanceMultiplier
+
+						// 3. Apply the offset based on the side
+						if models.Side(side) == models.Buy {
+							orderPrice = state.marketPrice - tickOffset
+						} else {
+							orderPrice = state.marketPrice + tickOffset
+						}
+
+						// 4. CRITICAL: Snap the final float to the exact 2-decimal grid
+						// so it stacks perfectly with the Market Maker's orders.
+						orderPrice = math.Round(orderPrice*100) / 100
+					}
 
 					order := models.Order{
 						ID:        generateOrderID(sym),
+						UserID:    NoiseTraderUserID, // Injected User ID
 						Symbol:    sym,
 						Side:      models.Side(side),
 						Quantity:  quantity,

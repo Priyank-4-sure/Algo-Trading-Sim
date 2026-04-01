@@ -11,11 +11,13 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
 )
 
+const MarketMakerUserID uint = 999999998 // Reserved high-ID to prevent PostgreSQL collisions
+
 // MarketMaker bridges the math engine and the matching engine
 type MarketMaker struct {
 	manager     *gbm.MarketManager
 	orderStream chan<- models.Order
-	
+
 	// Tracks active order IDs so we can cancel them when the price moves
 	activeOrders map[string][]models.Order
 	mu           sync.Mutex
@@ -44,7 +46,6 @@ func (mm *MarketMaker) Start(symbols []string, tickRate time.Duration) {
 	}
 }
 
-
 // updateOrderBook cancels the old spread and places a dynamically jittered ladder
 func (mm *MarketMaker) updateOrderBook(symbol string) {
 	// 1. Get the current theoretical fair value from the math engine
@@ -60,10 +61,10 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 	oldOrders := mm.activeOrders[symbol]
 	for _, oldOrder := range oldOrders {
 		cancelReq := models.Order{
-			ID:    oldOrder.ID,
-			Type:  models.Cancel,
-			Side:  oldOrder.Side,
-			Price: oldOrder.Price,
+			ID:     oldOrder.ID,
+			Type:   models.Cancel,
+			Side:   oldOrder.Side,
+			Price:  oldOrder.Price,
 			Symbol: symbol,
 		}
 		mm.orderStream <- cancelReq
@@ -73,7 +74,7 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 
 	// 3. Dynamic Tick Sizing using Basis Points (bps)
 	// Let's set the base tick size to 5 Basis Points (0.05% of the asset's current price)
-	baseTickPct := 0.0005 
+	baseTickPct := 0.0001
 	tickSize := fairPrice * baseTickPct
 
 	// 4. Spread Breathing (Jitter)
@@ -87,7 +88,7 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 
 	// 5. Asymmetric Ladder Generation
 	// Randomize the depth between 4 and 10 levels
-	levels := rand.Intn(7) + 4 
+	levels := rand.Intn(7) + 4
 
 	for i := 0; i < levels; i++ {
 		// Randomize quantity with a fat-tail bias (some levels have low volume, some high)
@@ -101,16 +102,18 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 		// Generate BID
 		bidOrder := models.Order{
 			ID:       mm.generateID("BID"),
+			UserID:   MarketMakerUserID, // Injected User ID
 			Symbol:   symbol,
 			Type:     models.Limit,
 			Side:     models.Buy,
 			Price:    math.Round(currentBidPrice*100) / 100, // Round to 2 decimals
 			Quantity: qty,
 		}
-		
+
 		// Generate ASK
 		askOrder := models.Order{
 			ID:       mm.generateID("ASK"),
+			UserID:   MarketMakerUserID, // Injected User ID
 			Symbol:   symbol,
 			Type:     models.Limit,
 			Side:     models.Sell,
@@ -120,7 +123,7 @@ func (mm *MarketMaker) updateOrderBook(symbol string) {
 
 		// Save them to active tracking and send them to the matching engine
 		mm.activeOrders[symbol] = append(mm.activeOrders[symbol], bidOrder, askOrder)
-		
+
 		mm.orderStream <- bidOrder
 		mm.orderStream <- askOrder
 
