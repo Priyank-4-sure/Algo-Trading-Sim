@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -73,6 +74,16 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 			response.WriteJson(w, http.StatusBadRequest, response.GeneralError("insufficient balance", nil))
 			return
 		}
+
+		// We use gorm.Expr to prevent race conditions during concurrent requests.
+		err := h.DB.Primary.Model(&portfolio).
+			Where("balance >= ?", requiredCash). // Extra safety check at DB level
+			UpdateColumn("balance", gorm.Expr("balance - ?", requiredCash)).Error
+
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to deduct balance", err))
+			return
+		}
 	}
 
 	if req.Side == string(models.Sell) {
@@ -116,9 +127,14 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now().UnixNano(),
 	}
 
+	if err := h.Store.InsertOrder(order); err != nil {
+		log.Printf("Failed to insert order %s: %v", order.ID, err)
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to save order", nil))
+		return
+	}
+
 	select {
 	case h.OrderStream <- order:
-		h.Store.InsertOrder(order)
 		response.WriteJson(w, http.StatusAccepted, response.GeneralSuccess("order queued", map[string]string{"order_id": order.ID}))
 	default:
 		response.WriteJson(w, http.StatusServiceUnavailable, response.GeneralError("engine busy", nil))

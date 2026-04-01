@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  BrowserRouter, 
-  Routes, 
-  Route, 
+  createBrowserRouter, 
+  RouterProvider, 
   Navigate, 
   Outlet 
 } from 'react-router-dom';
@@ -21,17 +20,60 @@ import { useAuth } from './hooks/useAuth';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
-  
-  // Using the real auth hook from the develop branch
   const { isAuthenticated, loading, logout } = useAuth();
 
-  const toggleDarkMode = () => setDarkMode(!darkMode);
+  const toggleDarkMode = useCallback(() => setDarkMode(prev => !prev), []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
-  // The loading spinner from the develop branch
+  // ─── ROUTER CONFIGURATION (Incoming Change Priority) ─────────────
+  // We use createBrowserRouter as per the develop branch for better performance
+  // and access to data APIs.
+  const router = useMemo(() => createBrowserRouter([
+    {
+      path: "/",
+      element: <LandingPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+    },
+    {
+      path: "/login",
+      element: !isAuthenticated ? (
+        <LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      ) : (
+        <Navigate to="/app/trade" replace />
+      )
+    },
+    {
+      path: "/signup",
+      element: !isAuthenticated ? (
+        <SignUpPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      ) : (
+        <Navigate to="/app/trade" replace />
+      )
+    },
+    {
+      path: "/app",
+      element: isAuthenticated ? (
+        <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={logout}>
+          <Outlet /> 
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      ),
+      children: [
+        { index: true, element: <Navigate to="trade" replace /> },
+        { path: "trade", element: <TradePage darkMode={darkMode} /> },
+        { path: "markets", element: <MarketsPage /> },
+        { path: "watchlist", element: <WatchlistPage /> }, // Integrated from HEAD
+        { path: "analytics", element: <AnalyticsPage /> },
+        { path: "portfolio", element: <PortfolioPage /> },
+        { path: "history", element: <HistoryPage /> },
+      ]
+    }
+  ]), [darkMode, isAuthenticated, logout, toggleDarkMode]);
+
+  // Loading state handled after the hook definition to avoid "Rules of Hooks" violations
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -40,60 +82,5 @@ export default function App() {
     );
   }
 
-  // The stable BrowserRouter structure from your branch
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public Routes */}
-        <Route 
-          path="/" 
-          element={<LandingPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />} 
-        />
-        
-        {/* Smart Auth Routes - Redirects to app if they are already logged in! */}
-        <Route 
-          path="/login" 
-          element={!isAuthenticated ? (
-            <LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
-          ) : (
-            <Navigate to="/app/trade" replace />
-          )} 
-        />
-        <Route 
-          path="/signup" 
-          element={!isAuthenticated ? (
-            <SignUpPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
-          ) : (
-            <Navigate to="/app/trade" replace />
-          )} 
-        />
-
-        {/* Protected Dashboard Routes */}
-        <Route 
-          path="/app" 
-          element={
-            isAuthenticated ? (
-              // Uses the real 'logout' function from useAuth
-              <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={logout}>
-                <Outlet />
-              </Layout>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        >
-          {/* Default redirect to /app/trade */}
-          <Route index element={<Navigate to="trade" replace />} />
-          
-          {/* Child Routes rendered inside Layout's Outlet */}
-          <Route path="trade" element={<TradePage darkMode={darkMode} />} />
-          <Route path="markets" element={<MarketsPage />} />
-          <Route path="watchlist" element={<WatchlistPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="portfolio" element={<PortfolioPage />} />
-          <Route path="history" element={<HistoryPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }

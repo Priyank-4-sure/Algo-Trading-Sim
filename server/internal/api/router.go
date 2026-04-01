@@ -19,7 +19,7 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300, 
+		MaxAge:           300,
 	}))
 
 	// Middleware
@@ -64,6 +64,12 @@ func SetupRouter(h *handlers.Handler) *chi.Mux {
 			r.Route("/portfolio", func(r chi.Router) {
 				r.Get("/history", h.GetPortfolioHistory)
 				r.Post("/reset", h.ResetPortfolio)
+			})
+
+			r.Route("/watchlist", func(r chi.Router) {
+				r.Get("/", h.GetWatchlist)
+				r.Post("/{symbol}", h.AddToWatchlist)
+				r.Delete("/{symbol}", h.RemoveFromWatchlist)
 			})
 		})
 	})

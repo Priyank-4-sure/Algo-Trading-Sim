@@ -5,21 +5,23 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/api/middleware"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) GetPortfolio(userID string) (models.Portfolio, error) {
-	
+
 	var portfolio models.Portfolio
 	result := h.DB.Primary.Preload("Holdings").First(&portfolio, "user_id = ?", userID)
 
 	if result.Error != nil {
 		return portfolio, result.Error
 	}
-	
+
 	return portfolio, nil
 }
 
@@ -155,5 +157,132 @@ func (h *Handler) CreatePortfolio(userID uint) error {
 	if err := h.DB.Primary.Create(&portfolio).Error; err != nil {
 		return fmt.Errorf("failed to create portfolio for user %d: %w", userID, err)
 	}
+	return nil
+}
+
+func (h *Handler) UpdatePortfolioAfterTrade(trade models.TradeMessage) error {
+    if trade.MakerUserID == trade.TakerUserID {
+        // No portfolio update needed for self-trades
+        return nil
+    }
+
+    var order *models.Order
+    var err error
+    var isMakerBuyer bool // NEW: Track exactly who the buyer is
+
+    if strings.HasPrefix(trade.MakerOrderID, "ORD-") {
+        order, err = h.Store.GetOrderByID(trade.MakerOrderID)
+        if err != nil {
+            return fmt.Errorf("failed to fetch maker order %s: %w", trade.MakerOrderID, err)
+        }
+        // If we fetched the Maker's order, they are the buyer if their side is Buy
+        isMakerBuyer = order.Side == models.Buy 
+
+    } else if strings.HasPrefix(trade.TakerOrderID, "ORD-") {
+        order, err = h.Store.GetOrderByID(trade.TakerOrderID)
+        if err != nil {
+            return fmt.Errorf("failed to fetch taker order %s: %w", trade.TakerOrderID, err)
+        }
+        // If we fetched the Taker's order, the Maker is the buyer if the Taker's side is Sell
+        isMakerBuyer = order.Side == models.Sell 
+
+    } else {
+        return fmt.Errorf("invalid order IDs in trade message: %s, %s", trade.MakerOrderID, trade.TakerOrderID)
+    }
+
+    // Now route them to the correct functions!
+    if isMakerBuyer {
+        // Maker is the Buyer, Taker is the Seller
+        if trade.MakerUserID != 0 {
+            if err := h.HandleUpdatePortfolioAfterTradeOfBuyer(trade, fmt.Sprintf("%d", trade.MakerUserID)); err != nil {
+                return fmt.Errorf("failed to update buyer's portfolio: %w", err)
+            }
+        }
+        if trade.TakerUserID != 0 {
+            if err := h.HandleUpdatePortfolioAfterTradeOfSeller(trade, fmt.Sprintf("%d", trade.TakerUserID)); err != nil {
+                return fmt.Errorf("failed to update seller's portfolio: %w", err)
+            }
+        }
+    } else {
+        // Maker is the Seller, Taker is the Buyer
+        if trade.MakerUserID != 0 {
+            if err := h.HandleUpdatePortfolioAfterTradeOfSeller(trade, fmt.Sprintf("%d", trade.MakerUserID)); err != nil {
+                return fmt.Errorf("failed to update seller's portfolio: %w", err)
+            }
+        }
+        if trade.TakerUserID != 0 {
+            if err := h.HandleUpdatePortfolioAfterTradeOfBuyer(trade, fmt.Sprintf("%d", trade.TakerUserID)); err != nil {
+                return fmt.Errorf("failed to update buyer's portfolio: %w", err)
+            }
+        }
+    }
+
+    return nil
+}
+
+func (h *Handler) HandleUpdatePortfolioAfterTradeOfBuyer(trade models.TradeMessage, userId string) error {
+	portfolio, err := h.GetPortfolio(userId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch portfolio: %w", err)
+	}
+
+	found := false
+	for i := range portfolio.Holdings {
+		if portfolio.Holdings[i].Symbol == trade.Symbol {
+			portfolio.Holdings[i].Quantity += trade.Quantity
+
+			// Explicitly save the specific holding we just modified
+			if err := h.DB.Primary.Save(&portfolio.Holdings[i]).Error; err != nil {
+				return fmt.Errorf("failed to update holding: %w", err)
+			}
+
+			found = true
+			break
+		}
+	}
+
+	// If the loop finished and we never found the symbol, create it NOW
+	if !found {
+		newHolding := models.Holding{
+			PortfolioID: portfolio.ID,
+			Symbol:      trade.Symbol,
+			Quantity:    trade.Quantity,
+			AvgPrice:    trade.Price,
+		}
+		if err := h.DB.Primary.Create(&newHolding).Error; err != nil {
+			return fmt.Errorf("failed to create new holding: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (h *Handler) HandleUpdatePortfolioAfterTradeOfSeller(trade models.TradeMessage, userId string) error {
+	portfolio, err := h.GetPortfolio(userId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch portfolio: %w", err)
+	}
+
+	for i := range portfolio.Holdings {
+		if portfolio.Holdings[i].Symbol == trade.Symbol {
+			portfolio.Holdings[i].Quantity -= trade.Quantity
+
+			// 1. Explicitly save the reduced holding
+			if err := h.DB.Primary.Save(&portfolio.Holdings[i]).Error; err != nil {
+				return fmt.Errorf("failed to update holding: %w", err)
+			}
+
+			// 2. Safely add funds to the portfolio balance
+			earnedCash := trade.Price * float64(trade.Quantity)
+			err := h.DB.Primary.Model(&portfolio).
+				UpdateColumn("balance", gorm.Expr("balance + ?", earnedCash)).Error
+
+			if err != nil {
+				return fmt.Errorf("failed to update portfolio balance: %w", err)
+			}
+			break
+		}
+	}
+
 	return nil
 }

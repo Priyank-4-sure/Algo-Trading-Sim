@@ -156,7 +156,7 @@ func (e *Engine) match(taker models.Order, side *OrderSide) int64 {
 			// Emit Event: Volume Removed from Maker's Side
 			e.EventStream <- models.MarketEvent{Type: models.EventVolumeRemoved, Symbol: taker.Symbol, Side: maker.Side, Price: bestPrice, Quantity: tradeQty}
 
-			log.Printf("[%s] TRADE: %d shares @ ₹%.2f", taker.Symbol, tradeQty, bestPrice)
+			// log.Printf("[%s] TRADE: %d shares @ ₹%.2f", taker.Symbol, tradeQty, bestPrice)
 
 			remaining -= tradeQty
 			maker.Quantity -= tradeQty
