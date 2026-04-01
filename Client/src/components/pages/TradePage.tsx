@@ -75,7 +75,7 @@ export function TradePage({ darkMode }: TradePageProps) {
   }, [stopResizing]);
 
   const middleWidth = 100 - leftWidth - rightWidth;
-  const timeframes = ['1s', '5s', '1m', '5m', '1h', '1D'];
+  const timeframes = ['1s', '5s'];
 
   return (
     <div className="flex w-full h-full gap-0 overflow-hidden select-none">
@@ -86,11 +86,11 @@ export function TradePage({ darkMode }: TradePageProps) {
       >
         <div className="flex-1 glass-panel rounded-lg flex flex-col overflow-hidden">
           <div className="px-3 py-2 border-b border-main font-semibold text-sm">
-            Order Book ({activeSymbol})
+            Order Book ({activeIndexData?.displaySymbol || activeSymbol})
           </div>
           <div className="flex-1 px-2 pt-2 overflow-hidden flex flex-col no-scrollbar">
             {/* Pass the active symbol to the OrderBook component */}
-            <OrderBook />
+            <OrderBook symbol={activeSymbol} />
           </div>
         </div>
       </div>
@@ -120,14 +120,14 @@ export function TradePage({ darkMode }: TradePageProps) {
                 
                 {/* Dynamic Dropdown to switch between indices */}
                 <div className="flex items-center gap-2 relative group cursor-pointer">
-                  <select 
+                  <select
                     value={activeSymbol}
                     onChange={(e) => setActiveSymbol(e.target.value)}
                     className="appearance-none bg-transparent hover:bg-panel/50 outline-none pr-6 py-1 pl-2 rounded cursor-pointer font-bold"
                   >
                     {markets.map(market => (
                       <option key={market.symbol} value={market.symbol} className="bg-background text-foreground">
-                        {market.symbol}
+                        {market.displaySymbol}
                       </option>
                     ))}
                   </select>
@@ -164,7 +164,7 @@ export function TradePage({ darkMode }: TradePageProps) {
               </div>
               <div className="flex-1 p-0 flex items-center justify-center relative bg-panel min-h-0">
                 {/* Pass the active symbol down to the ChartPanel */}
-                <ChartPanel darkMode={darkMode} timeframe={timeframe} />
+                <ChartPanel darkMode={darkMode} timeframe={timeframe} symbol={activeSymbol} />
               </div>
             </div>
           </div>

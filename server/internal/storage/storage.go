@@ -590,6 +590,8 @@ type MarketPriceData struct {
 	Symbol    string    `json:"symbol"`
 	Price     float64   `json:"price"`      // current mid price from Redis
 	Change24h float64   `json:"change_24h"` // % change over last 24h
+	High24h   float64   `json:"high_24h"`   // highest high in last 24h
+	Low24h    float64   `json:"low_24h"`    // lowest low in last 24h
 	Volume24h float64   `json:"volume_24h"` // notional volume (price * qty) over 24h
 	Sparkline []float64 `json:"sparkline"`  // last 8 close prices from candles_5s
 }
@@ -648,15 +650,19 @@ func (s *Store) fetchSymbolMarketData(symbol string, fallbackPrice float64) Mark
 		data.Sparkline[len(sparkCandles)-1-i] = c.Close
 	}
 
-	// 4. 24h stats from candles_5s — open price and notional volume
+	// 4. 24h stats from candles_5s — open price, high, low and notional volume
 	type Stats struct {
 		Open24h   float64 `gorm:"column:open_24h"`
+		High24h   float64 `gorm:"column:high_24h"`
+		Low24h    float64 `gorm:"column:low_24h"`
 		Volume24h float64 `gorm:"column:volume_24h"`
 	}
 	var stats Stats
 	s.tsdb.Raw(`
 		SELECT
 			FIRST(open, bucket)   AS open_24h,
+			MAX(high)             AS high_24h,
+			MIN(low)              AS low_24h,
 			SUM(volume * close)   AS volume_24h
 		FROM candles_5s
 		WHERE symbol = ?
@@ -664,6 +670,8 @@ func (s *Store) fetchSymbolMarketData(symbol string, fallbackPrice float64) Mark
 	`, symbol).Scan(&stats)
 
 	data.Volume24h = stats.Volume24h
+	data.High24h = stats.High24h
+	data.Low24h = stats.Low24h
 
 	// 5. % change: (last_traded - open_24h) / open_24h * 100
 	if stats.Open24h > 0 {

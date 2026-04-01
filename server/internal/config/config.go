@@ -62,8 +62,15 @@ func LoadConfig() (*AppConfig, error) {
 	}
 
 	// 4. Map Environment Variables (e.g., PRIMARY_DB_PASSWORD maps to primary_db.password)
+	// Note: AutomaticEnv alone won't override YAML keys explicitly set to "" during Unmarshal,
+	// so we use BindEnv to explicitly wire each secret env var.
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("primary_db.password", "PRIMARY_DB_PASSWORD")
+	_ = viper.BindEnv("candlestick_db.password", "CANDLESTICK_DB_PASSWORD")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	_ = viper.BindEnv("server.jwt_secret", "SERVER_JWT_SECRET")
+	_ = viper.BindEnv("server.jwt_refresh_secret", "SERVER_JWT_REFRESH_SECRET")
 
 	// 5. Decode everything into our Go structs
 	var cfg AppConfig

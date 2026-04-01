@@ -6,10 +6,10 @@ import { useTradeWebSocket } from '../../hooks/useTrade'; // Verify this path!
 interface ChartPanelProps {
   darkMode: boolean;
   timeframe?: string;
+  symbol: string;
 }
 
-export function ChartPanel({ darkMode, timeframe = '1s' }: ChartPanelProps) {
-  const symbol = 'BANK';
+export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelProps) {
   
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -125,7 +125,7 @@ export function ChartPanel({ darkMode, timeframe = '1s' }: ChartPanelProps) {
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [darkMode, chartType, timeframe, showGrid]);
+  }, [darkMode, chartType, timeframe, showGrid, symbol]);
 
   return (
     <div className="flex w-full h-full bg-panel font-sans">
