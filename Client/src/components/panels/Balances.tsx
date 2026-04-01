@@ -13,7 +13,7 @@ export function Balances() {
          <div className="flex justify-between items-start px-3 py-2 border-b border-main shrink-0">
             <div className="flex flex-col">
                <span className="font-semibold text-sm text-main leading-tight mt-1">Balances & Portfolio</span>
-               {tab === 'balances' && <span className="font-bold text-main font-mono text-xs mt-1">$42,500.00</span>}
+               {tab === 'balances' && <span className="font-bold text-main font-mono text-xs mt-1">₹42,500.00</span>}
             </div>
             <div className="flex bg-main p-1 rounded-lg border border-main shrink-0">
                <button 
@@ -45,15 +45,15 @@ export function Balances() {
                      </div>
                      <div className="flex flex-col items-end leading-tight">
                         <span className="font-semibold text-main font-mono">0.452</span>
-                        <span className="text-[10px] text-muted font-mono">$29,032.18</span>
+                        <span className="text-[10px] text-muted font-mono">₹29,032.18</span>
                      </div>
                   </div>
                   <div className="flex justify-between items-center bg-panel/50 p-2 rounded-lg border border-main/50 hover:border-white/20 transition-colors cursor-pointer group">
                      <div className="flex gap-2 items-center">
-                        <div className="w-7 h-7 rounded-full border-2 border-main flex items-center justify-center text-xs font-bold text-muted shadow-sm group-hover:scale-110 transition-transform">$$</div>
+                        <div className="w-7 h-7 rounded-full border-2 border-main flex items-center justify-center text-xs font-bold text-muted shadow-sm group-hover:scale-110 transition-transform">₹₹</div>
                         <div className="flex flex-col leading-tight">
-                           <span className="font-semibold text-main">USD</span>
-                           <span className="text-[10px] text-muted">US Dollar</span>
+                           <span className="font-semibold text-main">INR</span>
+                           <span className="text-[10px] text-muted">Indian Rupee</span>
                         </div>
                      </div>
                      <div className="flex flex-col items-end leading-tight">
@@ -74,8 +74,8 @@ export function Balances() {
                            </div>
                         </div>
                         <div className="flex flex-col items-end leading-tight">
-                           <span className="font-semibold text-main font-mono">${w.price}</span>
-                           <span className={`text-[10px] font-bold ${w.up ? 'text-up' : 'text-down'}`}>{w.change}</span>
+                           <span className="font-semibold text-main font-mono">₹{w.price}</span>
+                           <span className={`text-[10px] font-bold ₹{w.up ? 'text-up' : 'text-down'}`}>{w.change}</span>
                         </div>
                      </div>
                   ))}
