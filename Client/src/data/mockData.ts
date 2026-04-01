@@ -1,7 +1,8 @@
 // src/data/mockData.ts
 
 export interface MarketPair {
-  symbol: string;
+  symbol: string;       // backend key (TECH, MEME, BANK)
+  displaySymbol: string; // UI label (BTC/INR, ETH/INR, SOL/INR)
   name: string;
   price: string;
   change: string;

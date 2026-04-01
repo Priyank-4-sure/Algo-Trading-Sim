@@ -13,7 +13,7 @@ server:
 primary_db:
   driver: "postgres"
   host: "localhost"  # Because the Go app runs locally, pointing to the Docker exposed port
-  port: 5432
+  port: 5434
   user: "admin"
   name: "alerts_core_db"
   ssl_mode: "disable" # SSL is usually disabled for local Docker dev

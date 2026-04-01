@@ -39,6 +39,7 @@ export function TopNav({
   const currentPair = markets.find(p => p.symbol === activeSymbol) || markets[0];
 
   const filteredPairs = markets.filter(p =>
+    p.displaySymbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -90,7 +91,7 @@ export function TopNav({
                     : 'border-main bg-main/50 hover:border-white/50'}`}
               >
                 <Search size={14} className={`${isPickerOpen ? 'text-main' : 'text-muted group-hover:text-main'}`} />
-                <span className="flex-1 text-left text-sm font-bold text-main">{activeSymbol}</span>
+                <span className="flex-1 text-left text-sm font-bold text-main">{currentPair?.displaySymbol || activeSymbol}</span>
                 <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
               </button>
 
@@ -130,7 +131,7 @@ export function TopNav({
                             {pair.icon}
                           </div>
                           <div className="flex flex-col items-start leading-tight">
-                            <span className="font-bold text-sm text-main">{pair.symbol}</span>
+                            <span className="font-bold text-sm text-main">{pair.displaySymbol}</span>
                             <span className="text-xs text-muted">{pair.name}</span>
                           </div>
                         </div>

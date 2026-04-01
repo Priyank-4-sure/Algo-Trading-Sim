@@ -30,12 +30,14 @@ export function MarketsPage() {
 
   // Setup top cards (using parsed change values)
   const sortedByGain = [...markets].sort((a, b) => parseFloat(b.change) - parseFloat(a.change));
+  const trending = markets.find(m => m.symbol === 'BANK');
+  const mostActive = markets.find(m => m.symbol === 'TECH');
   const topCharts = [
-    { title: 'Top Gainer', ...sortedByGain[0] },
-    { title: 'Top Loser', ...sortedByGain[sortedByGain.length - 1] },
-    { title: 'Trending', ...markets.find(m => m.symbol === 'SOL/INR')! },
-    { title: 'Most Active', ...markets.find(m => m.symbol === 'BTC/INR')! }
-  ].filter(Boolean); // filter out any undefined if data is missing
+    sortedByGain[0] ? { title: 'Top Gainer', ...sortedByGain[0] } : null,
+    sortedByGain.length > 0 ? { title: 'Top Loser', ...sortedByGain[sortedByGain.length - 1] } : null,
+    trending ? { title: 'Trending', ...trending } : null,
+    mostActive ? { title: 'Most Active', ...mostActive } : null,
+  ].filter(Boolean);
 
   return (
     <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none font-sans">
