@@ -42,7 +42,7 @@ func (g *Generator) NextPrice() float64 {
 
 	g.currentPrice = g.currentPrice * math.Exp(driftComponent+shockComponent)
 	if g.currentPrice < 0.0001 {
-		g.currentPrice = 0.0001 
+		g.currentPrice = 0.0001
 	}
 	return g.currentPrice
 }
@@ -51,6 +51,13 @@ func (g *Generator) GetCurrentPrice() float64 {
 	g.muLock.RLock()
 	defer g.muLock.RUnlock()
 	return g.currentPrice
+}
+
+// GetVolatility safely reads the current volatility (sigma)
+func (g *Generator) GetVolatility() float64 {
+	g.muLock.RLock()
+	defer g.muLock.RUnlock()
+	return g.sigma
 }
 
 func (g *Generator) SetDrift(newMu float64) {

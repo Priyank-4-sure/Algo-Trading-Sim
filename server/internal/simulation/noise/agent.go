@@ -1,8 +1,9 @@
 package noise
 
 import (
+	"context" // NEW: For graceful shutdown
 	"fmt"
-	// "log"
+	"log"
 	"math/rand"
 	"time"
 
@@ -10,16 +11,20 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
 )
 
-// Agent orchestrates the synthetic noise trading logic.
 type Agent struct {
 	marketManager *gbm.MarketManager
 	orderStream   chan models.Order
-	tickerTape    <-chan float64 // NEW: Listens to live trades
+	tickerTape    <-chan models.TradeMessage
 	rng           *rand.Rand
 }
 
-// NewAgent initializes a new Noise Trader Agent.
-func NewAgent(manager *gbm.MarketManager, stream chan models.Order, tape <-chan float64) *Agent {
+type symbolState struct {
+	marketPrice   float64
+	priceEMA      float64 // NEW: Smoothed price for momentum
+	nextOrderTime time.Time
+}
+
+func NewAgent(manager *gbm.MarketManager, stream chan models.Order, tape <-chan models.TradeMessage) *Agent {
 	return &Agent{
 		marketManager: manager,
 		orderStream:   stream,
@@ -28,82 +33,107 @@ func NewAgent(manager *gbm.MarketManager, stream chan models.Order, tape <-chan 
 	}
 }
 
-// Start begins the synthetic order generation loop.
-func (a *Agent) Start(symbols []string, sessionDuration time.Duration) {
-	symbol := symbols[0]
-
-	// Configuration
+// Start now takes a context.Context for graceful shutdowns
+func (a *Agent) Start(ctx context.Context, symbols []string, sessionDuration time.Duration) {
 	kSensitivity := 10.0
 	contrarianChance := 0.15
 	paretoAlpha := 1.16
 	minOrderSize := 1.0
 	baseDelay := 100 * time.Millisecond
 	minDelayLimit := 1 * time.Millisecond
+	
+	// EMA smoothing factor (e.g., 0.1 means new prices have 10% weight)
+	alphaEMA := 0.1 
 
-	// Bootstrap the initial state
 	startTime := time.Now()
-	marketPrice := a.marketManager.GetPrice(symbol) // Use GBM just to start
-	lastExecutionPrice := marketPrice
 
-	// Create our event timer instead of using time.Sleep
-	delay := CalculateNextDelay(baseDelay, 0.2, 0.0, minDelayLimit)
-	fireTimer := time.NewTimer(delay)
+	states := make(map[string]*symbolState)
+	for _, sym := range symbols {
+		startPrice := a.marketManager.GetPrice(sym)
+		states[sym] = &symbolState{
+			marketPrice:   startPrice,
+			priceEMA:      startPrice, // Initialize EMA to starting price
+			nextOrderTime: time.Now().Add(CalculateNextDelay(baseDelay, 0.2, 0.0, minDelayLimit)),
+		}
+	}
+
+	evalTicker := time.NewTicker(10 * time.Millisecond)
+	defer evalTicker.Stop()
 
 	for {
 		select {
-		// EVENT A: A trade happened on the exchange! Update our known price.
-		case livePrice := <-a.tickerTape:
-			marketPrice = livePrice 
+		case <-ctx.Done():
+			// Graceful shutdown triggered from main.go
+			// log.Println("Noise Trader Agent shutting down...")
+			return 
 
-		// EVENT B: Our delay timer finished! Time to submit an order.
-		case <-fireTimer.C:
-			// 1. Calculate Progress
-			elapsed := time.Since(startTime)
+		case trade := <-a.tickerTape:
+			if state, exists := states[trade.Symbol]; exists {
+				state.marketPrice = trade.Price
+				// Update EMA smoothly on every trade: 
+				// $EMA_{new} = Price \times \alpha + EMA_{old} \times (1 - \alpha)$
+				state.priceEMA = (trade.Price * alphaEMA) + (state.priceEMA * (1.0 - alphaEMA))
+			}
+
+		case <-evalTicker.C:
+			now := time.Now()
+			
+			elapsed := now.Sub(startTime)
 			progress := float64(elapsed) / float64(sessionDuration)
 			if progress > 1.0 {
-				startTime = time.Now()
+				startTime = now
 				progress = 0.0
 			}
 
-			// 2. Mock volatility (can fetch from GBM later)
-			currentVolatility := 0.2 
+			for sym, state := range states {
+				if now.After(state.nextOrderTime) {
+					currentVolatility := a.marketManager.GetVolatility(sym)
 
-			// 3. Calculate Momentum (\Delta S) against the real market price
-			deltaS := 0.0
-			if lastExecutionPrice > 0 {
-				deltaS = (marketPrice - lastExecutionPrice) / lastExecutionPrice
+					// Calculate Momentum against the smoothed EMA, not the last execution
+					deltaS := 0.0
+					if state.priceEMA > 0 {
+						deltaS = (state.marketPrice - state.priceEMA) / state.priceEMA
+					}
+
+					side := DetermineOrderSide(a.rng, deltaS, kSensitivity, contrarianChance)
+					quantity := GenerateOrderSize(a.rng, paretoAlpha, minOrderSize)
+
+					// 70% chance to place a Market Order, 30% chance for a Limit Order
+					orderType := models.Market
+					orderPrice := 0.0
+
+					if a.rng.Float64() > 0.70 {
+						orderType = models.Limit
+						// Add a tiny random offset to the current price for the limit order
+						offset := state.marketPrice * 0.001 * a.rng.NormFloat64()
+						orderPrice = state.marketPrice + offset
+					}
+
+					order := models.Order{
+						ID:        generateOrderID(sym),
+						Symbol:    sym,
+						Side:      models.Side(side),
+						Quantity:  quantity,
+						Type:      orderType,
+						Price:     orderPrice,
+						Timestamp: time.Now().UnixNano(),
+					}
+
+					select {
+					case a.orderStream <- order:
+						log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, state.marketPrice)
+					default:
+					}
+
+					// Schedule the NEXT order
+					nextDelay := CalculateNextDelay(baseDelay, currentVolatility, progress, minDelayLimit)
+					state.nextOrderTime = now.Add(nextDelay)
+				}
 			}
-
-			// 4. Generate Order
-			side := DetermineOrderSide(a.rng, deltaS, kSensitivity, contrarianChance)
-			quantity := GenerateOrderSize(a.rng, paretoAlpha, minOrderSize)
-
-			order := models.Order{
-				ID:        generateOrderID(),
-				Symbol:    symbol,
-				Side:      models.Side(side),
-				Quantity:  quantity,
-				Type:      models.Market,
-				Timestamp: time.Now().UnixNano(),
-			}
-			
-			// 5. Fire Order
-			select {
-			case a.orderStream <- order:
-				// log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, marketPrice)
-			default:
-				// Drop if engine is completely backed up
-			}
-
-			// 6. Update state and reset timer for the next order
-			lastExecutionPrice = marketPrice
-			
-			nextDelay := CalculateNextDelay(baseDelay, currentVolatility, progress, minDelayLimit)
-			fireTimer.Reset(nextDelay)
 		}
 	}
 }
 
-func generateOrderID() string {
-	return fmt.Sprintf("NOISE-%d", time.Now().UnixNano())
+func generateOrderID(symbol string) string {
+	return fmt.Sprintf("NOISE-%s-%d", symbol, time.Now().UnixNano())
 }
