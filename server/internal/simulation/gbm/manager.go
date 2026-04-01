@@ -39,7 +39,7 @@ func (m *MarketManager) AddAsset(ticker, assetClass string, startPrice float64) 
 
 	// 1. Generate the unique DNA and math engine
 	profile := NewProfileFactory(assetClass)
-	gen := NewGenerator(startPrice, 0.0, 0.1, 0.00000317)
+	gen := NewGenerator(startPrice, 0.0, 0.1, 0.00000000317)
 
 	asset := &ManagedAsset{
 		Ticker:       ticker,
