@@ -151,3 +151,15 @@ func (m *MarketManager) GetPrice(ticker string) float64 {
 	}
 	return 0.0 // Returns 0 if the asset doesn't exist
 }
+
+func (m *MarketManager) GetVolatility(ticker string) float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if asset, exists := m.assets[ticker]; exists {
+        // Assuming your Generator struct has a GetVolatility() or similar method 
+        // to match your existing GetCurrentPrice() method.
+		return asset.Generator.GetVolatility() 
+	}
+	return 0.2 // Fallback default if asset doesn't exist
+}

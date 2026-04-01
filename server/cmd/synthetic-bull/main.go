@@ -30,7 +30,7 @@ var orderStream = make(chan models.Order, 10000)
 var tradeStream = make(chan models.TradeMessage, 10000)
 var eventStream = make(chan models.MarketEvent, 10000)
 var lobStream = make(chan models.LOBSnapshot, 500)
-var tickerTape = make(chan float64, 1000)
+var tickerTape = make(chan models.TradeMessage, 1000)
 
 // Store is the global financial-data store (TimescaleDB + Redis)
 var store *storage.Store
@@ -84,6 +84,10 @@ func main() {
 	log.Println("=====================================================")
 	log.Println("🚀 STARTING ALGORITHMIC TRADING SIMULATOR")
 	log.Println("=====================================================")
+
+	// NEW: Create a cancellation context for all background workers (like Noise Trader)
+	ctxWorkers, cancelWorkers := context.WithCancel(context.Background())
+	defer cancelWorkers() // Safety catch to ensure it always fires on exit
 
 	// 1. Load config
 	cfg, err := config.LoadConfig()
@@ -146,13 +150,13 @@ func main() {
 
 			// Feed tickerTape for noise trader (non-blocking)
 			select {
-			case tickerTape <- trade.Price:
+			case tickerTape <- trade:
 			default:
 			}
 		}
 	}()
 
-	// 8. GBM Market Manager — multi-asset from assets.json (File 1)
+	// 8. GBM Market Manager — multi-asset from assets.json
 	marketManager := gbm.NewMarketManager()
 
 	assetFile, err := os.ReadFile("internal/config/assets.json")
@@ -186,7 +190,7 @@ func main() {
 		}
 		metaJSON, _ := json.Marshal(assetMetadata)
 		dbConnections.Redis.HSet(ctxBackground, "market:assets", a.Symbol, metaJSON)
-		// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
+				// log.Printf("📦 Seeded %s into Memory and Redis", a.Symbol)
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -195,11 +199,11 @@ func main() {
 	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
 	go marketMaker.Start(activeSymbols, 100*time.Millisecond)
 
-	// 10. Noise Trader — uses activeSymbols
+	// 10. Noise Trader — passes ctxWorkers so it can be gracefully shut down
 	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
-	go noiseTrader.Start(activeSymbols, 8*time.Hour)
+	go noiseTrader.Start(ctxWorkers, activeSymbols, 8*time.Hour)
 
-	// 11. GBM fair value diagnostics — 2s interval, all symbols (File 1)
+	// 11. GBM fair value diagnostics — 2s interval, all symbols
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
@@ -239,18 +243,23 @@ func main() {
 	<-done
 	log.Println("\n--- INITIATING SHUTDOWN ---")
 
-	// Shutdown all active symbols (File 1 — handles multi-asset)
+	// SHUTDOWN STEP 1: Instantly broadcast kill signal to the Noise Trader
+	cancelWorkers()
+	log.Println("Stopped noise order generation.")
+
+	// SHUTDOWN STEP 2: Kill the GBM math engines
 	for _, sym := range activeSymbols {
 		marketManager.RemoveAsset(sym)
 	}
 	time.Sleep(200 * time.Millisecond)
 	log.Println("Exchange offline.")
 
+	// SHUTDOWN STEP 3: Close the HTTP Server
 	slog.Info("Shutting down API server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctxServer, cancelServer := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelServer()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(ctxServer); err != nil {
 		slog.Error("Server shutdown error:", slog.String("error", err.Error()))
 	}
 	slog.Info("Server stopped gracefully. Goodbye!")
