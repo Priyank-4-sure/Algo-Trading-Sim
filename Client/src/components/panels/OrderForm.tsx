@@ -12,7 +12,7 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
 
    const [tab, setTab] = useState<'order' | 'pending'>('order');
    const [side, setSide] = useState<'buy' | 'sell'>('buy');
-   const [type, setType] = useState<'limit' | 'market' | 'stop-limit'>('limit');
+   const [type, setType] = useState<'limit' | 'market' >('limit');
    
    const { cashBalance } = usePortfolio();
 
@@ -58,10 +58,6 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
 
    const handleSubmit = async () => {
      if (amount <= 0) return;
-     if (type === 'stop-limit') {
-         setApiError("Stop-Limit orders are not supported yet.");
-         return;
-     }
 
      setIsLoading(true);
      setApiError(null);
@@ -137,7 +133,7 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
                   </div>
 
                   <div className="flex gap-4 border-b border-main uppercase tracking-wide text-[10px] pb-2 mb-3 shrink-0">
-                     {(['limit', 'market', 'stop-limit'] as const).map(t => (
+                     {(['limit', 'market'] as const).map(t => (
                        <button
                          key={t}
                          onClick={() => {
@@ -202,7 +198,7 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
 
                      <button
                        onClick={handleSubmit}
-                       disabled={amount <= 0 || isLoading || type === 'stop-limit'}
+                       disabled={amount <= 0 || isLoading}
                        className={`w-full py-2.5 rounded-lg font-bold text-white transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${side === 'buy' ? 'bg-up hover:brightness-110' : 'bg-down hover:brightness-110'} shadow-lg shrink-0 text-sm flex items-center justify-center gap-2`}
                      >
                         {isLoading ? (

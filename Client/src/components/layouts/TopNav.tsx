@@ -115,7 +115,7 @@ export function TopNav({
 
                   <div className="max-h-80 overflow-y-auto no-scrollbar">
                     <div className="p-2 flex gap-2 border-b border-trading-border">
-                      {['All', 'Crypto', 'Stocks'].map(cat => (
+                      {['All'].map(cat => (
                         <button key={cat} className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border transition-all ${cat === 'All' ? 'bg-panel border-white text-main' : 'border-main text-muted hover:text-main hover:border-white/50'}`}>{cat}</button>
                       ))}
                     </div>

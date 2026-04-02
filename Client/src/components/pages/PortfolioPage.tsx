@@ -1,31 +1,30 @@
-import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Activity, Target, AlertTriangle, ChevronDown } from 'lucide-react';
-import { usePortfolio } from '../../hooks/usePortfolio';
+import React, { useState, useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useOutletContext } from 'react-router-dom';
+import { DashboardContextType } from '../layouts/Layout';
 import { AnimatedValue } from '../shared/AnimatedValue';
-import { MiniSparkline } from '../shared/MiniSparkline';
 
 export function PortfolioPage() {
-  const {
-    holdings, cashBalance, totalPortfolioValue,
-    totalUnrealizedPnL, totalPnLPercentage,
-    riskMetrics, concentrationWarning, updatePrice,
-  } = usePortfolio();
+  const { holdings } = useOutletContext<DashboardContextType>();
+
+  const cashBalance = 0; // still from portfolio WS payload; kept as local until wired up
+
+  const totalPortfolioValue = useMemo(
+    () => holdings.reduce((sum, h) => sum + h.value, 0) + cashBalance,
+    [holdings, cashBalance],
+  );
+  const totalUnrealizedPnL = useMemo(
+    () => holdings.reduce((sum, h) => sum + h.unrealizedPnL, 0),
+    [holdings],
+  );
+  const totalPnLPercentage = useMemo(() => {
+    const totalCost = holdings.reduce((sum, h) => sum + h.quantity * h.avgPrice, 0);
+    return totalCost > 0 ? (totalUnrealizedPnL / totalCost) * 100 : 0;
+  }, [holdings, totalUnrealizedPnL]);
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'value' | 'pnl' | 'change'>('value');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      holdings.forEach((h) => {
-        const changePercent = (Math.random() - 0.5) * 0.004;
-        const newPrice = h.currentPrice * (1 + changePercent);
-        const change24h = h.change24hPercent + (Math.random() - 0.5) * 0.1;
-        updatePrice(h.id, newPrice, change24h);
-      });
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [holdings, updatePrice]);
 
   const sortedHoldings = [...holdings].sort((a, b) => {
     let aVal = 0, bVal = 0;
