@@ -1,5 +1,5 @@
 import { 
-  Moon, Sun, Search, Bell, ChevronDown, LogOut, User, ChevronRight,
+  Moon, Sun, Search, ChevronDown, LogOut, User, ChevronRight,
   BarChart2, PieChart, Star, History, LineChart, Activity, Menu
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
@@ -86,7 +86,7 @@ export function TopNav({
           >
             <Menu size={18} />
           </button>
-          <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
+          <img src="/assets/images/logo.webp" alt="NextBull Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
           <span className="font-semibold text-base md:text-xl tracking-wide text-white hidden sm:block">NEXTBULL</span>
         </div>
 
