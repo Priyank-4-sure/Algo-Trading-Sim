@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { ChartPanel, OrderBook, Balances, OrderForm } from '../panels';
-import { Maximize2, X, ChevronDown } from 'lucide-react';
+import { Maximize2, X } from 'lucide-react';
 import { DashboardContextType } from '../layouts/Layout';
 
 interface TradePageProps {
@@ -10,7 +10,7 @@ interface TradePageProps {
 
 export function TradePage({ darkMode }: TradePageProps) {
   // 1. Grab all our dynamic data from the Layout context
-  const { activeSymbol, setActiveSymbol, markets, positions } = useOutletContext<DashboardContextType>();
+  const { activeSymbol, setActiveSymbol, markets, holdings } = useOutletContext<DashboardContextType>();
 
   // 2. Find the currently active market so we can display its % change
   // Fallback to the first market just in case it's still loading
@@ -21,7 +21,7 @@ export function TradePage({ darkMode }: TradePageProps) {
   const currentMarketPrice = Number(activeIndexData?.price) || 0; 
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [timeframe, setTimeframe] = useState('1m');
+  const [timeframe, setTimeframe] = useState('1s');
 
   // Custom Resizability State
   const [leftWidth, setLeftWidth] = useState(280);
@@ -132,19 +132,8 @@ export function TradePage({ darkMode }: TradePageProps) {
           >
             <div className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${isFullscreen ? 'rounded-none border-none bg-panel' : 'glass-panel rounded-lg'}`}>
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
-                <div className="flex items-center gap-2 relative group cursor-pointer">
-                  <select
-                    value={activeSymbol}
-                    onChange={(e) => setActiveSymbol(e.target.value)}
-                    className="appearance-none bg-transparent hover:bg-panel/50 outline-none pr-6 py-1 pl-2 rounded cursor-pointer font-bold"
-                  >
-                    {markets.map(market => (
-                      <option key={market.symbol} value={market.symbol} className="bg-background text-foreground">
-                        {market.displaySymbol}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-2 pointer-events-none text-muted" />
+                <div className="flex items-center gap-2">
+                  <span className="font-bold">{activeIndexData?.displaySymbol || activeSymbol}</span>
                   {activeIndexData && (
                     <span className={`text-xs font-medium ${activeIndexData.isPositive ? 'text-up' : 'text-down'}`}>
                       {activeIndexData.change}
@@ -158,7 +147,7 @@ export function TradePage({ darkMode }: TradePageProps) {
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`text-xs px-2 py-1 rounded transition-colors whitespace-nowrap ${tf === timeframe ? 'bg-panel border border-white/20 text-main' : 'hover:bg-panel text-muted hover:text-main'}`}
+                        className={`text-xs px-2 py-1 rounded transition-colors whitespace-nowrap ${tf === timeframe ? 'bg-black/50 border border-white/20 text-main' : 'hover:bg-panel text-muted hover:text-main'}`}
                       >
                         {tf}
                       </button>
@@ -183,62 +172,74 @@ export function TradePage({ darkMode }: TradePageProps) {
             <div className="h-[1px] w-8 bg-panel/50" />
           </div>
 
-          {/* Positions Section */}
+          {/* Holdings / Positions Section */}
           <div className={`flex-1 shrink-0 ${isHorizontal ? 'min-h-0 pt-0' : 'min-h-[250px] pt-[2px]'}`}>
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
-                <span>Positions</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted font-normal">{positions.length} Open</span>
-                  {positions.length > 0 && (
-                    <button className="text-[10px] px-3 py-1.5 rounded-md bg-down text-white hover:brightness-110 transition-colors font-bold shadow-sm">
-                      Close All
-                    </button>
-                  )}
-                </div>
+                <span>Holdings</span>
+                <span className="text-xs text-muted font-normal">{holdings.length} asset{holdings.length !== 1 ? 's' : ''}</span>
               </div>
-              <div className="flex-1 p-2 flex flex-col overflow-y-auto overflow-x-auto text-sm no-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
+              <div className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar">
+                <table className="w-full text-left text-sm border-collapse min-w-[520px]">
+                  <thead className="sticky top-0 bg-panel z-10">
                     <tr className="text-muted border-b border-main/50 text-[10px] uppercase tracking-wider">
-                      <th className="pb-2 font-medium">Symbol</th>
-                      <th className="pb-2 font-medium">Side</th>
-                      <th className="pb-2 font-medium">Size</th>
-                      <th className="pb-2 font-medium">Entry Price</th>
-                      <th className="pb-2 font-medium">Mark Price</th>
-                      <th className="pb-2 font-medium text-right">PnL (ROE%)</th>
-                      <th className="pb-2 font-medium text-right">Action</th>
+                      <th className="pb-2 pt-2 px-3 font-medium">Asset</th>
+                      <th className="pb-2 pt-2 px-2 font-medium text-right">Qty</th>
+                      <th className="pb-2 pt-2 px-2 font-medium text-right">Avg Price</th>
+                      <th className="pb-2 pt-2 px-2 font-medium text-right">Current</th>
+                      <th className="pb-2 pt-2 px-2 font-medium text-right">Value</th>
+                      <th className="pb-2 pt-2 px-2 font-medium text-right">P&amp;L</th>
+                      <th className="pb-2 pt-2 px-3 font-medium text-right">Wt</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-main/50">
-                    {positions.length === 0 ? (
+                    {holdings.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-muted">No open positions</td>
+                        <td colSpan={7} className="py-8 text-center text-muted text-xs">No holdings yet</td>
                       </tr>
                     ) : (
-                      positions.map((pos) => (
-                        <tr 
-                          key={pos.id} 
-                          className={`group transition-colors ${pos.symbol === activeSymbol ? 'bg-panel/80' : 'hover:bg-panel/50'}`}
-                        >
-                          <td className="py-2.5 font-bold text-main">
-                            {pos.symbol}
-                            {pos.symbol === activeSymbol && <span className="ml-2 text-[10px] text-muted">(Active)</span>}
-                          </td>
-                          <td className={`py-2.5 ${pos.side === 'Long' ? 'text-up' : 'text-down'}`}>{pos.side}</td>
-                          <td className="py-2.5 font-mono">{pos.size}</td>
-                          <td className="py-2.5 font-mono text-muted">{pos.entryPrice}</td>
-                          <td className="py-2.5 font-mono text-muted">{pos.markPrice}</td>
-                          <td className={`py-2.5 text-right font-mono font-bold ${pos.isPositive ? 'text-up' : 'text-down'}`}>
-                            {pos.pnl} <span className="text-[10px] opacity-70 ml-1">({pos.roe})</span>
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <button className="text-[10px] px-3 py-1.5 rounded-md bg-down/20 text-down hover:bg-down/40 transition-colors font-bold shadow-sm">
-                              Close
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      holdings.map((h) => {
+                        const isPositive = h.unrealizedPnL >= 0;
+                        const is24hPositive = h.change24hPercent >= 0;
+                        return (
+                          <tr key={h.id} className={`transition-colors ${h.asset === activeSymbol ? 'bg-panel/80' : 'hover:bg-panel/50'}`}>
+                            <td className="py-2 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ backgroundColor: h.color }}>
+                                  {h.asset.slice(0, 2)}
+                                </div>
+                                <div className="leading-tight">
+                                  <div className="font-bold text-main text-xs">{h.asset}</div>
+                                  <div className="text-[10px] text-muted">{h.name}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 font-mono text-right text-main font-semibold text-xs">{h.quantity.toFixed(4)}</td>
+                            <td className="py-2 px-2 font-mono text-right text-muted text-xs">₹{h.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                            <td className="py-2 px-2 font-mono text-right text-xs">
+                              <div className="font-semibold text-main">₹{h.currentPrice.toFixed(2)}</div>
+                              <div className={`text-[10px] font-bold ${is24hPositive ? 'text-up' : 'text-down'}`}>
+                                {is24hPositive ? '+' : ''}{h.change24hPercent.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 font-mono text-right font-bold text-main text-xs">
+                              ₹{h.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className={`py-2 px-2 font-mono text-right font-bold text-xs ${isPositive ? 'text-up' : 'text-down'}`}>
+                              {isPositive ? '+' : ''}₹{Math.abs(h.unrealizedPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              <div className="text-[10px] opacity-70">({isPositive ? '+' : ''}{h.pnLPercentage.toFixed(1)}%)</div>
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <div className="w-8 h-1 bg-main/30 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ backgroundColor: h.color, width: `${Math.min(h.portfolioWeight, 100)}%` }} />
+                                </div>
+                                <span className="font-mono text-[10px] font-bold text-muted">{h.portfolioWeight.toFixed(0)}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

@@ -1,88 +1,76 @@
-import { useState } from 'react';
-import { Star } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown } from 'lucide-react';
+import { useWatchlistData } from '../../hooks/useWatchlistData';
+import { getSymbolMeta } from '../../data/symbolMeta';
+import { API_BASE_URL } from '../../config';
 
 export function Balances() {
-   const [tab, setTab] = useState<'balances' | 'watchlist'>('balances');
-   const watchlist = [
-      { symbol: 'ETH', name: 'Ethereum', price: '3,380.20', change: '+2.4%', up: true },
-      { symbol: 'SOL', name: 'Solana', price: '148.45', change: '-1.2%', up: false }
-   ];
+  const { data, loading, refetch } = useWatchlistData();
 
-   return (
-      <div className="flex flex-col h-full bg-panel text-sm w-full font-sans">
-         <div className="flex justify-between items-start px-3 py-2 border-b border-main shrink-0">
-            <div className="flex flex-col">
-               <span className="font-semibold text-sm text-main leading-tight mt-1">Balances & Portfolio</span>
-               {tab === 'balances' && <span className="font-bold text-main font-mono text-xs mt-1">₹42,500.00</span>}
-            </div>
-            <div className="flex bg-main p-1 rounded-lg border border-main shrink-0">
-               <button 
-                  onClick={() => setTab('balances')}
-                  className={`text-[10px] uppercase font-bold px-3 py-1.5 rounded-md transition-colors ${tab === 'balances' ? 'bg-panel shadow text-main' : 'text-muted hover:text-main'}`}
-               >
-                  Balances
-               </button>
-               <button 
-                  onClick={() => setTab('watchlist')}
-                  className={`text-[10px] uppercase font-bold px-3 py-1.5 rounded-md transition-colors ${tab === 'watchlist' ? 'bg-panel shadow text-main' : 'text-muted hover:text-main'}`}
-               >
-                  Watchlist
-               </button>
-            </div>
-         </div>
+  const handleRemove = async (symbol: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      await fetch(`${API_BASE_URL}/watchlist/${symbol}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      refetch();
+    } catch (err) {
+      console.error('Failed to remove from watchlist:', err);
+    }
+  };
 
-         <div className="flex-1 p-2 flex flex-col min-h-0 overflow-hidden">
-         <div className="flex flex-col gap-2 overflow-y-auto pr-1 no-scrollbar flex-1">
-            {tab === 'balances' ? (
-               <>
-                  <div className="flex justify-between items-center bg-panel/50 p-2 rounded-lg border border-main/50 hover:border-white/20 transition-colors cursor-pointer group">
-                     <div className="flex gap-2 items-center">
-                        <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center text-xs font-bold text-white shadow-md group-hover:scale-110 transition-transform">B</div>
-                        <div className="flex flex-col leading-tight">
-                           <span className="font-semibold text-main">BTC</span>
-                           <span className="text-[10px] text-muted">Bitcoin</span>
-                        </div>
-                     </div>
-                     <div className="flex flex-col items-end leading-tight">
-                        <span className="font-semibold text-main font-mono">0.452</span>
-                        <span className="text-[10px] text-muted font-mono">₹29,032.18</span>
-                     </div>
-                  </div>
-                  <div className="flex justify-between items-center bg-panel/50 p-2 rounded-lg border border-main/50 hover:border-white/20 transition-colors cursor-pointer group">
-                     <div className="flex gap-2 items-center">
-                        <div className="w-7 h-7 rounded-full border-2 border-main flex items-center justify-center text-xs font-bold text-muted shadow-sm group-hover:scale-110 transition-transform">₹₹</div>
-                        <div className="flex flex-col leading-tight">
-                           <span className="font-semibold text-main">INR</span>
-                           <span className="text-[10px] text-muted">Indian Rupee</span>
-                        </div>
-                     </div>
-                     <div className="flex flex-col items-end leading-tight">
-                        <span className="font-semibold text-main font-mono">13,467.82</span>
-                        <span className="text-[10px] text-muted">Available</span>
-                     </div>
-                  </div>
-               </>
-            ) : (
-               <>
-                  {watchlist.map(w => (
-                     <div key={w.symbol} className="flex justify-between items-center bg-panel/50 p-2 rounded-lg border border-main/50 hover:border-white/20 transition-colors cursor-pointer group">
-                        <div className="flex gap-2 items-center">
-                           <button className="text-yellow-400 hover:text-muted transition-colors"><Star size={14} fill="currentColor" /></button>
-                           <div className="flex flex-col leading-tight">
-                              <span className="font-semibold text-main">{w.symbol}</span>
-                              <span className="text-[10px] text-muted">{w.name}</span>
-                           </div>
-                        </div>
-                        <div className="flex flex-col items-end leading-tight">
-                           <span className="font-semibold text-main font-mono">₹{w.price}</span>
-                           <span className={`text-[10px] font-bold ₹{w.up ? 'text-up' : 'text-down'}`}>{w.change}</span>
-                        </div>
-                     </div>
-                  ))}
-               </>
-            )}
-         </div>
-         </div>
+  return (
+    <div className="flex flex-col h-full bg-panel text-sm w-full font-sans">
+      <div className="flex justify-between items-start px-3 py-2 border-b border-main shrink-0">
+        <div className="flex bg-main p-1 rounded-lg border border-main shrink-0">
+          <button className="text-[10px] uppercase font-bold px-3 py-1.5 rounded-md transition-colors text-white">
+            Watchlist
+          </button>
+        </div>
       </div>
-   );
+
+      <div className="flex-1 p-2 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex flex-col gap-2 overflow-y-auto pr-1 no-scrollbar flex-1">
+          {loading ? (
+            <div className="text-center text-muted text-xs py-4">Loading...</div>
+          ) : data.length === 0 ? (
+            <div className="text-center text-muted text-xs py-4">No symbols in watchlist</div>
+          ) : (
+            data.map(item => {
+              const meta = getSymbolMeta(item.symbol);
+              const isPositive = item.change_24h >= 0;
+              return (
+                <div
+                  key={item.symbol}
+                  className="flex justify-between items-center bg-panel/50 p-2 rounded-lg border border-main/50 hover:border-white/20 transition-colors cursor-pointer group"
+                >
+                  <div className="flex gap-2 items-center">
+                    <button
+                      onClick={() => handleRemove(item.symbol)}
+                      className="text-yellow-400 hover:text-muted transition-colors"
+                      title="Remove from watchlist"
+                    >
+                      <Star size={14} fill="currentColor" />
+                    </button>
+                    <div className="flex flex-col leading-tight">
+                      <span className="font-semibold text-main">{item.symbol}</span>
+                      <span className="text-[10px] text-muted">{meta.name}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end leading-tight">
+                    <span className="font-semibold text-main font-mono">₹{item.price.toFixed(2)}</span>
+                    <span className={`text-[10px] font-bold flex items-center gap-0.5 ${isPositive ? 'text-up' : 'text-down'}`}>
+                      {isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                      {isPositive ? '+' : ''}{item.change_24h.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

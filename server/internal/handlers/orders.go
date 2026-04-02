@@ -121,7 +121,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
-	// Validate the cancellation (e.g., check if the order exists, if it's still open, etc.)
+	// 1. Validate auth
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
 	if !ok {
 		response.WriteJson(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
@@ -134,16 +134,57 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
+	// 2. Fetch the order from Redis to get the Symbol (needed for cleanup) and verify ownership
+	rawOrder, err := h.DB.Redis.Get(ctx, "order:"+orderID).Result()
+	if err != nil {
+		response.WriteJson(w, http.StatusNotFound, response.GeneralError("order not found", nil))
+		return
+	}
+
+	var existingOrder models.Order
+	if err := json.Unmarshal([]byte(rawOrder), &existingOrder); err != nil {
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to parse order data", err))
+		return
+	}
+
+	if existingOrder.UserID != userID {
+		response.WriteJson(w, http.StatusForbidden, response.GeneralError("forbidden: you do not own this order", nil))
+		return
+	}
+
+	// 3. Queue the cancel signal to the matching engine
 	cancel := models.Order{
 		ID:        orderID,
 		UserID:    userID,
+		Symbol:    existingOrder.Symbol,
 		Type:      models.Cancel,
 		Timestamp: time.Now().UnixNano(),
 	}
 
 	select {
 	case h.OrderStream <- cancel:
-		response.WriteJson(w, http.StatusAccepted, response.GeneralSuccess("cancel request queued", map[string]string{"order_id": orderID}))
+		// 4. Engine accepted the cancel signal -> Execute Redis clearance pipeline directly here
+		pipe := h.DB.Redis.Pipeline()
+
+		// Delete the main order JSON payload
+		pipe.Del(ctx, "order:"+orderID)
+
+		// Remove the order ID from the user's specific order index
+		pipe.ZRem(ctx, fmt.Sprintf("orders:user:%d", userID), orderID)
+
+		// Remove the order ID from the open orders index
+		pipe.ZRem(ctx, "orders:open:"+existingOrder.Symbol, orderID)
+
+		_, pipeErr := pipe.Exec(ctx)
+		if pipeErr != nil {
+			log.Printf("Failed to clear Redis for canceled order %s: %v", orderID, pipeErr)
+			// We log the error but still return success because the engine will cancel it anyway
+		}
+
+		response.WriteJson(w, http.StatusAccepted, response.GeneralSuccess("cancel request queued and cleared", map[string]string{"order_id": orderID}))
+
 	case <-time.After(5 * time.Second):
 		response.WriteJson(w, http.StatusServiceUnavailable, response.GeneralError("engine busy", nil))
 	}

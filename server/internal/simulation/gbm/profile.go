@@ -124,6 +124,20 @@ func NewProfileFactory(assetClass string) AssetProfile {
 		p.DriftBounds = applyBoundsJitter([4][2]float64{{-2.50, -0.80}, {1.50, 5.00}, {-0.20, 0.20}, {-0.10, 0.10}}, 0.2, false)
 		p.SigmaBounds = applyBoundsJitter([4][2]float64{{2.50, 4.00}, {1.50, 2.50}, {0.80, 1.50}, {0.40, 0.80}}, 0.2, true)
 
+	case "PREMIUM_EQUITY":
+		// Extremely stable blue-chip behavior, high institutional ownership
+		baseDrift := [4][4]float64{{0.50, 0.20, 0.25, 0.05}, {0.10, 0.60, 0.25, 0.05}, {0.05, 0.10, 0.80, 0.05}, {0.02, 0.08, 0.10, 0.80}}
+		baseVol := [4][4]float64{{0.20, 0.50, 0.30, 0.00}, {0.10, 0.60, 0.30, 0.00}, {0.02, 0.08, 0.80, 0.10}, {0.01, 0.04, 0.15, 0.80}}
+		
+		p.DriftTransitions = applyMatrixJitter(baseDrift, 0.02)
+		p.VolTransitions = applyMatrixJitter(baseVol, 0.02)
+		
+		// Drift is relatively slow and steady. Very low crash probability.
+		p.DriftBounds = applyBoundsJitter([4][2]float64{{-0.12, -0.04}, {0.08, 0.18}, {0.04, 0.09}, {-0.01, 0.02}}, 0.01, false)
+		
+		// Volatility is very compressed (10% to 15% in normal conditions)
+		p.SigmaBounds = applyBoundsJitter([4][2]float64{{0.25, 0.35}, {0.15, 0.25}, {0.10, 0.15}, {0.05, 0.10}}, 0.01, true)
+
 	default: // Fallback acts as a standard Mid-Cap equity
 		baseDrift := [4][4]float64{{0.60, 0.15, 0.20, 0.05}, {0.15, 0.60, 0.20, 0.05}, {0.10, 0.15, 0.70, 0.05}, {0.05, 0.05, 0.10, 0.80}}
 		baseVol := [4][4]float64{{0.30, 0.40, 0.20, 0.10}, {0.10, 0.50, 0.30, 0.10}, {0.05, 0.15, 0.70, 0.10}, {0.05, 0.10, 0.15, 0.70}}
