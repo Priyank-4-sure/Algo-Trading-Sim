@@ -66,7 +66,6 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
      setApiError(null);
 
      const payload = {
-       id: `ORD-${Date.now()}`, 
        symbol: symbol, 
        type: type.toUpperCase(),
        side: side.toUpperCase(), 
