@@ -46,13 +46,13 @@ type TradeRecord struct {
 
 // CandleRecord is READ-ONLY — queried from TimescaleDB continuous aggregate views
 type CandleRecord struct {
-	Symbol string    `gorm:"column:symbol"`
-	Bucket time.Time `gorm:"column:bucket"`
-	Open   float64   `gorm:"column:open"`
-	High   float64   `gorm:"column:high"`
-	Low    float64   `gorm:"column:low"`
-	Close  float64   `gorm:"column:close"`
-	Volume int64     `gorm:"column:volume"`
+	Symbol string    `gorm:"column:symbol"  json:"symbol"`
+	Bucket time.Time `gorm:"column:bucket"  json:"bucket_time"` // named bucket_time to match live tick field
+	Open   float64   `gorm:"column:open"    json:"open"`
+	High   float64   `gorm:"column:high"    json:"high"`
+	Low    float64   `gorm:"column:low"     json:"low"`
+	Close  float64   `gorm:"column:close"   json:"close"`
+	Volume int64     `gorm:"column:volume"  json:"volume"`
 }
 
 // ---- Store ----
@@ -453,6 +453,7 @@ func (s *Store) GetCandles(symbol, interval string, limit int) ([]CandleRecord, 
 	err := s.tsdb.Raw(query, symbol, limit).Scan(&candles).Error
 	return candles, err
 }
+
 
 func (s *Store) GetOrderByID(orderID string) (*models.Order, error) {
 	raw, err := s.redis.Get(s.ctx, "order:"+orderID).Result()

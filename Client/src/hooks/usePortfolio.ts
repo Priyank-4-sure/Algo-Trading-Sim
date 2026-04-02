@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 
 export interface Holding {
   id: string;
@@ -51,7 +52,7 @@ export function usePortfolio() {
       return;
     }
 
-    const wsUrl = `ws://localhost:8080/v1/ws?token=${token}`;
+    const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { API_BASE_URL } from "../config";
 
 export interface MarketPriceData {
   symbol: string;
@@ -18,7 +19,9 @@ export function useMarketPrices(onUpdate: (prices: MarketPriceData[]) => void) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    const ws = new WebSocket(`ws://localhost:8080/v1/ws?token=${token}`);
+    const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
+
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ action: "subscribe", topic: "prices:all" }));

@@ -32,9 +32,8 @@ func (h *Handler) GetAssets(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetMarketData(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	symbol := chi.URLParam(r, "symbol") // ← from /{symbol}
+	symbol := chi.URLParam(r, "symbol")
 
-	// Load asset from Redis to get start price for this symbol
 	assetStr, err := h.DB.Redis.HGet(ctx, "market:assets", symbol).Result()
 	if err != nil {
 		res := response.GeneralError("Symbol not found", err)
@@ -59,20 +58,17 @@ func (h *Handler) GetMarketData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetMarketCandles(w http.ResponseWriter, r *http.Request) {
-	symbol := chi.URLParam(r, "symbol")     // ← from /{symbol}
-	interval := chi.URLParam(r, "interval") // ← from /{interval}
-
+	symbol := chi.URLParam(r, "symbol")
+	interval := chi.URLParam(r, "interval")
 	if interval == "" {
-		interval = "5s"
+		interval = "1s"
 	}
 
-	candles, err := h.Store.GetCandles(symbol, interval, 100)
+	candles, err := h.Store.GetCandles(symbol, interval, 50000)
 	if err != nil {
-		res := response.GeneralError("Failed to fetch candles", err)
-		response.WriteJson(w, http.StatusInternalServerError, res)
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to fetch candles", err))
 		return
 	}
 
-	res := response.GeneralSuccess("Candles retrieved successfully", candles)
-	response.WriteJson(w, http.StatusOK, res)
+	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("Candles retrieved successfully", candles))
 }
