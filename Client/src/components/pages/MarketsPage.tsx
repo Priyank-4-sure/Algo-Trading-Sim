@@ -639,12 +639,7 @@ export function MarketsPage() {
                         </td>
                         <td className="py-2 px-3 text-right w-32">
                           <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                            <button
-                              onClick={() => handleTradeClick(asset.symbol)}
-                              className="text-[10px] bg-panel border border-main px-2 py-0.5 rounded hover:border-white/50 transition-colors text-main font-bold"
-                            >
-                              Chart
-                            </button>
+                            
                             <button
                               onClick={() => handleTradeClick(asset.symbol)}
                               className="text-[10px] bg-up px-2 py-0.5 rounded hover:brightness-110 transition-colors text-white font-bold"

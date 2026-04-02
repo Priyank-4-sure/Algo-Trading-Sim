@@ -6,6 +6,7 @@ import { MOCK_POSITIONS, MarketPair, Position } from "../../data/mockData";
 import { API_BASE_URL } from "../../config";
 import { SYMBOL_META } from "../../data/symbolMeta";
 import { useMarketPrices, MarketPriceData } from "../../hooks/useMarketPrices";
+import { usePortfolio, Holding } from "../../hooks/usePortfolio";
 
 // 👇 IMPORTANT: Adjust this import path to match where your AuthContext is located
 import { AuthContext } from "../../context/AuthContext";
@@ -22,6 +23,8 @@ export interface DashboardContextType {
   setActiveSymbol: (symbol: string) => void;
   markets: MarketPair[];
   positions: Position[];
+  holdings: Holding[];
+  updatePrice: (id: string, newPrice: number, change24h: number) => void;
   watchlist: string[];
   toggleWatchlist: (symbol: string) => Promise<void>;
 }
@@ -32,13 +35,15 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   // Get the access token directly from your AuthContext
   const authContext = useContext(AuthContext);
   const accessToken = authContext?.accessToken;
-
   // 1. Initialize global state
   const [activeSymbol, setActiveSymbol] = useState("");
   const [markets, setMarkets] = useState<MarketPair[]>([]);
   const [positions, setPositions] = useState<Position[]>(MOCK_POSITIONS);
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Portfolio holdings streamed via WebSocket (single shared connection)
+  const { holdings, updatePrice } = usePortfolio();
 
   // Fetch assets and watchlist from the backend API
   useEffect(() => {
@@ -182,7 +187,7 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
         
         <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full">
           {/* 2. Pass everything down through the Outlet context */}
-          <Outlet context={{ activeSymbol, setActiveSymbol, markets, positions,watchlist ,toggleWatchlist } satisfies DashboardContextType} />
+          <Outlet context={{ activeSymbol, setActiveSymbol, markets, positions, holdings, updatePrice, watchlist, toggleWatchlist } satisfies DashboardContextType} />
         </main>
       </div>
     </div>
