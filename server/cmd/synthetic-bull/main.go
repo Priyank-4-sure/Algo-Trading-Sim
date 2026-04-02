@@ -26,7 +26,7 @@ import (
 )
 
 // Global channels
-var orderStream = make(chan models.Order, 10000)
+var orderStream = make(chan models.Order, 100000)
 var tradeStream = make(chan models.TradeMessage, 10000)
 var eventStream = make(chan models.MarketEvent, 10000)
 var lobStream = make(chan models.LOBSnapshot, 500)

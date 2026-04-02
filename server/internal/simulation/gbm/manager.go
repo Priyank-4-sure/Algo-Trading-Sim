@@ -167,6 +167,31 @@ func (m *MarketManager) GetPrice(ticker string) float64 {
 	return 0.0 // Returns 0 if the asset doesn't exist
 }
 
+// GetProfile safely reads the static configuration bounds for an asset
+func (m *MarketManager) GetProfile(ticker string) AssetProfile {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if asset, exists := m.assets[ticker]; exists {
+		return asset.Profile
+	}
+	// Fallback to a standard profile if not found
+	return NewProfileFactory("DEFAULT") 
+}
+
+// GetDrift safely reads the current directional momentum (mu) of the asset
+func (m *MarketManager) GetDrift(ticker string) float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if asset, exists := m.assets[ticker]; exists {
+		// Note: You must ensure your 'Generator' struct has this method 
+        // to return its internal drift (mu) variable!
+		return asset.Generator.GetDrift() 
+	}
+	return 0.0 // Default to flat drift
+}
+
 func (m *MarketManager) GetVolatility(ticker string) float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
