@@ -1,4 +1,4 @@
-import { TrendingUp, Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 
 interface GuestTopNavProps {
   darkMode: boolean;
@@ -15,9 +15,9 @@ export function GuestTopNav({ darkMode, toggleDarkMode, onLogin, onSignUp, onGoH
     }`}>
       
       {/* Clickable Logo (Redirects Home) */}
-      <button onClick={onGoHome} className="flex items-center gap-2 text-blue-500 hover:scale-105 transition-transform outline-none">
-        <TrendingUp size={24} strokeWidth={3} />
-        <span className={`font-black text-xl tracking-tighter uppercase ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+      <button onClick={onGoHome} className="flex items-center gap-2 hover:scale-105 transition-transform outline-none">
+        <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-8 w-auto" />
+        <span className="font-semibold text-xl tracking-wide text-white">
           NEXTBULL
         </span>
       </button>
