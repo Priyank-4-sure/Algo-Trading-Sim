@@ -30,21 +30,6 @@ export function TradePage({ darkMode }: TradePageProps) {
 
   const isResizing = useRef<string | null>(null);
 
-  const startResizing = (type: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = type;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', stopResizing);
-    document.body.style.cursor = type.includes('width') ? 'col-resize' : 'row-resize';
-  };
-
-  const stopResizing = useCallback(() => {
-    isResizing.current = null;
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', stopResizing);
-    document.body.style.cursor = 'default';
-  }, []);
-
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
     const { clientX, clientY } = e;
@@ -72,6 +57,21 @@ export function TradePage({ darkMode }: TradePageProps) {
       }
     }
   }, []);
+
+  const stopResizing = useCallback(() => {
+    isResizing.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', stopResizing);
+    document.body.style.cursor = 'default';
+  }, [handleMouseMove]);
+
+  const startResizing = useCallback((type: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = type;
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', stopResizing);
+    document.body.style.cursor = type.includes('width') ? 'col-resize' : 'row-resize';
+  }, [handleMouseMove, stopResizing]);
 
   useEffect(() => {
     return () => stopResizing();

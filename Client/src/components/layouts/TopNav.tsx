@@ -73,9 +73,9 @@ export function TopNav({
     <header className="h-12 border-b border-main bg-panel flex items-center justify-between px-4 shrink-0 shadow-sm z-50 transition-colors font-sans">
       <div className="flex items-center gap-4">
         {/* NextBull Logo - Always visible */}
-        <div className="flex items-center gap-1 pr-4 border-r border-main">
-          <span className="text-main font-black text-2xl tracking-tighter font-display">N</span>
-          <span className="text-main font-extrabold tracking-[0.2em] text-sm font-display hidden sm:inline">EXTBULL</span>
+        <div className="flex items-center gap-2 pr-4 border-r border-main">
+          <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-8 w-auto" />
+          <span className="font-semibold text-xl tracking-wide text-white">NEXTBULL</span>
         </div>
 
         {/* --- CONDITIONAL RENDERING --- */}
@@ -197,13 +197,14 @@ export function TopNav({
         <div className="relative ml-2" ref={profileRef}>
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-sm shadow-sm transition-colors ${
+            className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-sm transition-colors ${
               isProfileOpen 
                 ? 'bg-main border-white text-panel' 
                 : 'bg-panel border-main text-main hover:border-white/50 shadow-white/5'
             }`}
+            title="View Profile"
           >
-            US
+            <User size={18} />
           </button>
 
           {isProfileOpen && (
