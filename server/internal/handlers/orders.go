@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -275,61 +273,10 @@ func (h *Handler) GetTradeHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 50
-	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
-		parsed, err := strconv.Atoi(rawLimit)
-		if err != nil || parsed <= 0 {
-			response.WriteJson(w, http.StatusBadRequest, response.GeneralError("limit must be a positive integer", nil))
-			return
-		}
-		if parsed > 200 {
-			parsed = 200
-		}
-		limit = parsed
-	}
-
-	orders, err := h.Store.GetOrdersByUser(userID)
+	trades, err := h.Store.GetTradesByUserID(userID)
 	if err != nil {
-		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to fetch user orders", err))
+		response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("Failed to retrieve trades", err))
 		return
-	}
-
-	if len(orders) == 0 {
-		response.WriteJson(w, http.StatusOK, response.GeneralSuccess("trade history retrieved", map[string]interface{}{
-			"trades": []models.TradeMessage{},
-		}))
-		return
-	}
-
-	uniqueSymbols := make(map[string]struct{})
-	for _, order := range orders {
-		if order.Symbol == "" {
-			continue
-		}
-		uniqueSymbols[order.Symbol] = struct{}{}
-	}
-
-	trades := make([]models.TradeMessage, 0)
-	for symbol := range uniqueSymbols {
-		symbolTrades, err := h.Store.GetRecentTrades(symbol, int64(limit))
-		if err != nil {
-			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError("failed to fetch trade history", err))
-			return
-		}
-
-		for _, t := range symbolTrades {
-			if t.MakerUserID == userID || t.TakerUserID == userID {
-				trades = append(trades, t)
-			}
-		}
-	}
-
-	sort.Slice(trades, func(i, j int) bool {
-		return trades[i].Timestamp > trades[j].Timestamp
-	})
-
-	if len(trades) > limit {
-		trades = trades[:limit]
 	}
 
 	response.WriteJson(w, http.StatusOK, response.GeneralSuccess("trade history retrieved", map[string]interface{}{

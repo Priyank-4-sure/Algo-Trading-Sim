@@ -15,7 +15,6 @@ export function SideNav({ onLogout }: SideNavProps) {
     { icon: <Activity size={20} />, label: 'Trade', path: '/app/trade' },
     { icon: <BarChart2 size={20} />, label: 'Markets', path: '/app/markets' },
     { icon: <Star size={20} />, label: 'Watchlist', path: '/app/watchlist' }, // <-- NEW
-    { icon: <LineChart size={20} />, label: 'Analytics', path: '/app/analytics' },
     { icon: <PieChart size={20} />, label: 'Portfolio', path: '/app/portfolio' },
     { icon: <History size={20} />, label: 'History', path: '/app/history' },
   ];
