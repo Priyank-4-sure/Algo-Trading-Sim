@@ -201,20 +201,10 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
           onSymbolChange={setActiveSymbol}
           markets={markets}
         />
-
-        <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full max-w-[1600px] mx-auto">
-          <Outlet
-            context={
-              {
-                activeSymbol,
-                setActiveSymbol,
-                markets,
-                positions,
-                watchlist,
-                toggleWatchlist,
-              } satisfies DashboardContextType
-            }
-          />
+        
+        <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full">
+          {/* 2. Pass everything down through the Outlet context */}
+          <Outlet context={{ activeSymbol, setActiveSymbol, markets, positions,watchlist ,toggleWatchlist } satisfies DashboardContextType} />
         </main>
       </div>
     </div>
