@@ -166,53 +166,112 @@ func (h *Handler) streamLobSnapshot(ctx context.Context, c *websocket.Conn, topi
 	}
 }
 
+// candleTick mirrors storage.CurrentCandle for local unmarshaling in this handler.
+type candleTick struct {
+	Open       float64   `json:"open"`
+	High       float64   `json:"high"`
+	Low        float64   `json:"low"`
+	Close      float64   `json:"close"`
+	Volume     int64     `json:"volume"`
+	BucketTime time.Time `json:"bucket_time"`
+}
+
 func (h *Handler) streamCandles(ctx context.Context, c *websocket.Conn, topic string) {
-	pubsub := h.DB.Redis.Subscribe(ctx, topic)
+	// Topic format: "candles:{symbol}" or "candles:{symbol}:{timeframe}"
+	parts := strings.Split(topic, ":")
+	symbol := ""
+	interval := "1s" // default
+
+	if len(parts) >= 2 {
+		symbol = parts[1]
+	}
+	if len(parts) >= 3 {
+		interval = parts[2]
+	}
+	if interval != "1s" && interval != "5s" {
+		interval = "1s"
+	}
+
+	// Always subscribe to the 1s Redis channel (the raw tick source)
+	redisChannel := "candles:" + symbol
+	pubsub := h.DB.Redis.Subscribe(ctx, redisChannel)
 	defer pubsub.Close()
 	ch := pubsub.Channel()
 
-	log.Printf("📡 Subscribed to Redis channel: %s", topic)
+	log.Printf("📡 Subscribed to Redis channel: %s (interval: %s)", redisChannel, interval)
 
-	// 1. Extract the actual symbol from the topic (e.g., "candles:TECH" -> "TECH")
-	symbol := topic
-	parts := strings.Split(topic, ":")
-	if len(parts) == 2 {
-		symbol = parts[1]
-	}
-
-	// 2. Fetch using the extracted symbol
-	candles, err := h.Store.GetCandles(symbol, "1s", 100)
+	// Send the full available history on connect
+	candles, err := h.Store.GetCandles(symbol, interval, 50000)
 	if err != nil {
 		log.Printf("Error fetching candles for %s: %v", symbol, err)
 	}
-
 	if len(candles) > 0 {
-		// 3. Send historical data with a distinct topic or flag so the frontend
-		// knows it's receiving an Array of candles, not a single Object.
 		if err := wsjson.Write(ctx, c, models.ServerMessage{
-			Topic: topic + ":historical", // Distinct topic for the initial load
+			Topic: topic + ":historical",
 			Data:  candles,
 		}); err != nil {
 			return
 		}
 	} else {
-		log.Printf("No historical candles found for %s", symbol)
+		log.Printf("No historical candles found for %s (interval: %s)", symbol, interval)
 	}
 
-	// ... (Your real-time select loop remains exactly the same)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("🛑 Client disconnected from %s", topic)
-			return
-		case msg := <-ch:
-			var candleData json.RawMessage = []byte(msg.Payload)
-			response := models.ServerMessage{
-				Topic: topic,
-				Data:  candleData,
-			}
-			if err := wsjson.Write(ctx, c, response); err != nil {
+	if interval == "1s" {
+		// Stream raw 1s ticks directly to the client
+		for {
+			select {
+			case <-ctx.Done():
+				log.Printf("🛑 Client disconnected from %s", topic)
 				return
+			case msg := <-ch:
+				var candleData json.RawMessage = []byte(msg.Payload)
+				if err := wsjson.Write(ctx, c, models.ServerMessage{Topic: topic, Data: candleData}); err != nil {
+					return
+				}
+			}
+		}
+	} else {
+		// 5s: aggregate incoming 1s ticks into 5-second OHLCV buckets server-side
+		var accum *candleTick
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Printf("🛑 Client disconnected from %s", topic)
+				return
+			case msg := <-ch:
+				var tick candleTick
+				if err := json.Unmarshal([]byte(msg.Payload), &tick); err != nil {
+					continue
+				}
+
+				bucket := tick.BucketTime.Truncate(5 * time.Second)
+
+				if accum == nil || !bucket.Equal(accum.BucketTime) {
+					// New 5s bucket — start fresh
+					accum = &candleTick{
+						Open:       tick.Open,
+						High:       tick.High,
+						Low:        tick.Low,
+						Close:      tick.Close,
+						Volume:     tick.Volume,
+						BucketTime: bucket,
+					}
+				} else {
+					// Same bucket — update running OHLCV
+					if tick.High > accum.High {
+						accum.High = tick.High
+					}
+					if tick.Low < accum.Low {
+						accum.Low = tick.Low
+					}
+					accum.Close = tick.Close
+					accum.Volume += tick.Volume
+				}
+
+				if err := wsjson.Write(ctx, c, models.ServerMessage{Topic: topic, Data: accum}); err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -297,7 +356,7 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 				case <-ctx.Done():
 					log.Printf("🛑 Client disconnected from %s", candleTopic)
 					return
-				case msg := <-ch:
+				case _ = <-ch:
 					// PRO TIP: Try to unmarshal the price directly from msg.Payload
 					// instead of hitting the database!
 					// Example:
@@ -306,7 +365,7 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 					//     updateCh <- priceUpdate{Symbol: symbol, Price: newPrice}
 					// }
 
-					log.Printf("Received update for %s: %s", symbol, msg.Payload)
+					// log.Printf("Received update for %s: %s", symbol, msg.Payload)
 
 					// If you MUST hit the DB:
 					price, err := h.Store.GetCurrentPrice(symbol)

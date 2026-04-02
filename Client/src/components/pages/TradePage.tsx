@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { ChartPanel, OrderBook, Balances, OrderForm } from '../panels';
 import { Maximize2, X, ChevronDown } from 'lucide-react';
-import { DashboardContextType } from '../layouts/Layout'; // Adjust path if your Layout is elsewhere
+import { DashboardContextType } from '../layouts/Layout';
 
 interface TradePageProps {
   darkMode: boolean;
@@ -15,6 +15,10 @@ export function TradePage({ darkMode }: TradePageProps) {
   // 2. Find the currently active market so we can display its % change
   // Fallback to the first market just in case it's still loading
   const activeIndexData = markets.find(m => m.symbol === activeSymbol) || markets[0];
+  
+  // NEW: Extract the current price from your market data. 
+  // Change '.price' if your backend uses a different key (like .lastPrice or .markPrice)
+  const currentMarketPrice = Number(activeIndexData?.price) || 0; 
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [timeframe, setTimeframe] = useState('1m');
@@ -39,21 +43,6 @@ export function TradePage({ darkMode }: TradePageProps) {
   }, []);
 
   const isResizing = useRef<string | null>(null);
-
-  const startResizing = (type: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = type;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', stopResizing);
-    document.body.style.cursor = type.includes('width') ? 'col-resize' : 'row-resize';
-  };
-
-  const stopResizing = useCallback(() => {
-    isResizing.current = null;
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', stopResizing);
-    document.body.style.cursor = 'default';
-  }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
@@ -83,6 +72,21 @@ export function TradePage({ darkMode }: TradePageProps) {
     }
   }, []);
 
+  const stopResizing = useCallback(() => {
+    isResizing.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', stopResizing);
+    document.body.style.cursor = 'default';
+  }, [handleMouseMove]);
+
+  const startResizing = useCallback((type: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = type;
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', stopResizing);
+    document.body.style.cursor = type.includes('width') ? 'col-resize' : 'row-resize';
+  }, [handleMouseMove, stopResizing]);
+
   useEffect(() => {
     return () => stopResizing();
   }, [stopResizing]);
@@ -101,7 +105,6 @@ export function TradePage({ darkMode }: TradePageProps) {
             Order Book ({activeIndexData?.displaySymbol || activeSymbol})
           </div>
           <div className="flex-1 px-2 pt-2 overflow-hidden flex flex-col no-scrollbar">
-            {/* Pass the active symbol to the OrderBook component */}
             <OrderBook symbol={activeSymbol} />
           </div>
         </div>
@@ -129,8 +132,6 @@ export function TradePage({ darkMode }: TradePageProps) {
           >
             <div className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${isFullscreen ? 'rounded-none border-none bg-panel' : 'glass-panel rounded-lg'}`}>
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
-                
-                {/* Dynamic Dropdown to switch between indices */}
                 <div className="flex items-center gap-2 relative group cursor-pointer">
                   <select
                     value={activeSymbol}
@@ -144,8 +145,6 @@ export function TradePage({ darkMode }: TradePageProps) {
                     ))}
                   </select>
                   <ChevronDown size={14} className="absolute right-2 pointer-events-none text-muted" />
-                  
-                  {/* Safely display the change percentage based on the active market */}
                   {activeIndexData && (
                     <span className={`text-xs font-medium ${activeIndexData.isPositive ? 'text-up' : 'text-down'}`}>
                       {activeIndexData.change}
@@ -165,17 +164,12 @@ export function TradePage({ darkMode }: TradePageProps) {
                       </button>
                     ))}
                   </div>
-                  <button
-                    onClick={() => setIsFullscreen(!isFullscreen)}
-                    className="text-muted hover:text-main transition-colors p-1"
-                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                  >
+                  <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-muted hover:text-main transition-colors p-1" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
                     {isFullscreen ? <X size={16} /> : <Maximize2 size={16} />}
                   </button>
                 </div>
               </div>
               <div className="flex-1 p-0 flex items-center justify-center relative bg-panel min-h-0">
-                {/* Pass the active symbol down to the ChartPanel */}
                 <ChartPanel darkMode={darkMode} timeframe={timeframe} symbol={activeSymbol} />
               </div>
             </div>
@@ -274,8 +268,8 @@ export function TradePage({ darkMode }: TradePageProps) {
             className={`pb-[2px] shrink-0 ${isHorizontal ? 'min-h-0' : 'min-h-[350px]'}`}
           >
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
-              {/* Pass active symbol to OrderForm */}
-              <OrderForm />
+              {/* CRITICAL: Passed currentMarketPrice down alongside symbol */}
+              <OrderForm symbol={activeSymbol} currentPrice={currentMarketPrice} />
             </div>
           </div>
 
@@ -289,7 +283,6 @@ export function TradePage({ darkMode }: TradePageProps) {
 
           <div className={`flex-1 shrink-0 ${isHorizontal ? 'min-h-0 pt-0' : 'min-h-[200px] pt-[2px]'}`}>
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
-              {/* Pass active symbol to Balances */}
               <Balances />
             </div>
           </div>

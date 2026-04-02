@@ -3,13 +3,13 @@
     "symbol": "HDFCBANK",
     "class": "STABLE_BANK",
     "start_price": 1450.00,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "JPM",
     "class": "STABLE_BANK",
     "start_price": 195.50,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "NVDA",
@@ -21,48 +21,48 @@
     "symbol": "SPY",
     "class": "INDEX_FUND",
     "start_price": 515.00,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "USDJPY",
     "class": "FOREX_MAJOR",
     "start_price": 151.50,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "XAUUSD",
     "class": "COMMODITY_METAL",
     "start_price": 2350.00,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "CRUDEOIL",
     "class": "COMMODITY_ENERGY",
     "start_price": 82.50,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "TLT",
     "class": "BOND_YIELD",
     "start_price": 90.50,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "SUZLON",
     "class": "PENNY_STOCK",
     "start_price": 40.20,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "BTCUSDT",
     "class": "CRYPTO_MAJOR",
     "start_price": 68500.00,
-    "isActive": false
+    "isActive": true
   },
   {
     "symbol": "DOGE",
     "class": "MEME_COIN",
     "start_price": 15.20,
-    "isActive": false
+    "isActive": true
   }
 ]

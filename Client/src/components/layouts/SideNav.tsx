@@ -1,5 +1,5 @@
 // 1. Added Star to the lucide-react imports
-import { LineChart, BarChart2, PieChart, History, Settings, Activity, Menu, LogOut, Star } from 'lucide-react';
+import { LineChart, BarChart2, PieChart, History, Activity, Menu, LogOut, Star } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
@@ -15,7 +15,6 @@ export function SideNav({ onLogout }: SideNavProps) {
     { icon: <Activity size={20} />, label: 'Trade', path: '/app/trade' },
     { icon: <BarChart2 size={20} />, label: 'Markets', path: '/app/markets' },
     { icon: <Star size={20} />, label: 'Watchlist', path: '/app/watchlist' }, // <-- NEW
-    { icon: <LineChart size={20} />, label: 'Analytics', path: '/app/analytics' },
     { icon: <PieChart size={20} />, label: 'Portfolio', path: '/app/portfolio' },
     { icon: <History size={20} />, label: 'History', path: '/app/history' },
   ];
@@ -61,14 +60,6 @@ export function SideNav({ onLogout }: SideNavProps) {
       </nav>
 
       <div className={`mt-auto w-full flex flex-col gap-2 ${expanded ? 'px-3' : 'px-2'}`}>
-        <button className={`h-10 flex items-center rounded-xl transition-all duration-300 group
-              ${expanded ? 'px-3 justify-start gap-3 w-full' : 'w-10 justify-center mx-auto'}
-              text-muted hover:text-main hover:bg-panel hover:rotate-6
-        `}>
-          <div className="shrink-0 transition-transform group-hover:rotate-45 duration-300"><Settings size={20} /></div>
-          {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">Settings</span>}
-        </button>
-        
         <button 
           onClick={onLogout}
           title={expanded ? '' : 'Log Out'}
