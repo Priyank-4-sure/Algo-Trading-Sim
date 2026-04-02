@@ -53,6 +53,12 @@ func (g *Generator) GetCurrentPrice() float64 {
 	return g.currentPrice
 }
 
+func (g *Generator) GetDrift() float64 {
+	g.muLock.RLock()
+	defer g.muLock.RUnlock()
+	return g.mu
+}
+
 // GetVolatility safely reads the current volatility (sigma)
 func (g *Generator) GetVolatility() float64 {
 	g.muLock.RLock()

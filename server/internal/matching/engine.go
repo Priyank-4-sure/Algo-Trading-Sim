@@ -50,6 +50,10 @@ func (e *Engine) Start() {
 // ---- Order Processing ----
 
 func (e *Engine) processOrder(order models.Order) {
+	if order.Symbol == "BTCUSDT" && order.Quantity > 50 {
+		log.Printf("🚨 GHOST CAUGHT! Massive %d share order received from UserID: %d", order.Quantity, order.UserID)
+	}
+
 	if order.Timestamp == 0 {
 		order.Timestamp = time.Now().UnixNano()
 	}

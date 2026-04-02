@@ -64,5 +64,11 @@
     "class": "MEME_COIN",
     "start_price": 15.20,
     "isActive": true
+  },
+  {
+    "symbol": "MRF",
+    "class": "PREMIUM_EQUITY",
+    "start_price": 135000.00,
+    "isActive": true
   }
 ]
