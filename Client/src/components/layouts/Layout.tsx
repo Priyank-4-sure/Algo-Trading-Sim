@@ -4,6 +4,7 @@ import { TopNav } from "./TopNav";
 import { SideNav } from "./SideNav";
 import { MOCK_POSITIONS, MarketPair, Position } from "../../data/mockData";
 import { API_BASE_URL } from "../../config";
+import { SYMBOL_META } from "../../data/symbolMeta";
 import { useMarketPrices, MarketPriceData } from "../../hooks/useMarketPrices";
 
 // 👇 IMPORTANT: Adjust this import path to match where your AuthContext is located
@@ -22,7 +23,7 @@ export interface DashboardContextType {
   markets: MarketPair[];
   positions: Position[];
   watchlist: string[];
-  toggleWatchlist: (symbol: string) => void;
+  toggleWatchlist: (symbol: string) => Promise<void>;
 }
 
 export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
@@ -37,31 +38,6 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   const [markets, setMarkets] = useState<MarketPair[]>([]);
   const [positions, setPositions] = useState<Position[]>(MOCK_POSITIONS);
   const [watchlist, setWatchlist] = useState<string[]>([]);
-
-  // Map backend symbols to user-friendly display names
-  const SYMBOL_META: Record<
-    string,
-    { displaySymbol: string; name: string; icon: string; iconColor: string }
-  > = {
-    TECH: {
-      displaySymbol: "BTC/INR",
-      name: "Bitcoin",
-      icon: "₿",
-      iconColor: "bg-up",
-    },
-    MEME: {
-      displaySymbol: "ETH/INR",
-      name: "Ethereum",
-      icon: "Ξ",
-      iconColor: "bg-main border border-main",
-    },
-    BANK: {
-      displaySymbol: "SOL/INR",
-      name: "Solana",
-      icon: "S",
-      iconColor: "bg-main border border-main",
-    },
-  };
 
   // Fetch assets and watchlist from the backend API
   useEffect(() => {
