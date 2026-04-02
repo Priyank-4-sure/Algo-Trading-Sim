@@ -117,7 +117,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	select {
 	case h.OrderStream <- order:
 		response.WriteJson(w, http.StatusAccepted, response.GeneralSuccess("order queued", map[string]string{"order_id": order.ID}))
-	default:
+	case <-time.After(5 * time.Second):
 		response.WriteJson(w, http.StatusServiceUnavailable, response.GeneralError("engine busy", nil))
 	}
 }
@@ -146,7 +146,7 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	select {
 	case h.OrderStream <- cancel:
 		response.WriteJson(w, http.StatusAccepted, response.GeneralSuccess("cancel request queued", map[string]string{"order_id": orderID}))
-	default:
+	case <-time.After(5 * time.Second):
 		response.WriteJson(w, http.StatusServiceUnavailable, response.GeneralError("engine busy", nil))
 	}
 }

@@ -297,7 +297,7 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 				case <-ctx.Done():
 					log.Printf("🛑 Client disconnected from %s", candleTopic)
 					return
-				case msg := <-ch:
+				case _ = <-ch:
 					// PRO TIP: Try to unmarshal the price directly from msg.Payload
 					// instead of hitting the database!
 					// Example:
@@ -306,7 +306,7 @@ func (h *Handler) streamPortFolioData(ctx context.Context, c *websocket.Conn, to
 					//     updateCh <- priceUpdate{Symbol: symbol, Price: newPrice}
 					// }
 
-					log.Printf("Received update for %s: %s", symbol, msg.Payload)
+					// log.Printf("Received update for %s: %s", symbol, msg.Payload)
 
 					// If you MUST hit the DB:
 					price, err := h.Store.GetCurrentPrice(symbol)
