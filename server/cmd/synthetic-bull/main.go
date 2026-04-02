@@ -106,11 +106,13 @@ func main() {
 	go func() {
 		for trade := range tradeStream {
 			// log.Printf("✅ [TRADE EXECUTED] %s & %s | %d shares of %s @ ₹%.2f of user %d (maker) and user %d (taker)",
-			// trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price, trade.MakerUserID, trade.TakerUserID)
+			// 	trade.MakerOrderID, trade.TakerOrderID, trade.Quantity, trade.Symbol, trade.Price, trade.MakerUserID, trade.TakerUserID)
 
-			err := apphandlers.UpdatePortfolioAfterTrade(trade)
-			if err != nil {
-				// log.Printf("⚠️ Failed to update portfolios after trade: %v", err)
+			if trade.MakerUserID < 900000000 || trade.TakerUserID < 900000000 {
+				err := apphandlers.UpdatePortfolioAfterTrade(trade)
+				if err != nil {
+					log.Printf("⚠️ Failed to update portfolios after trade: %v", err)
+				}
 			}
 
 			// Persist trade to TimescaleDB + update Redis candle + ring buffer
@@ -144,7 +146,7 @@ func main() {
 		Symbol     string  `json:"symbol"`
 		Class      string  `json:"class"`
 		StartPrice float64 `json:"start_price"`
-		Active   bool    `json:"isActive"`
+		Active     bool    `json:"isActive"`
 	}
 	if err := json.Unmarshal(assetFile, &configuredAssets); err != nil {
 		log.Fatal("❌ Failed to parse assets.json: ", err)

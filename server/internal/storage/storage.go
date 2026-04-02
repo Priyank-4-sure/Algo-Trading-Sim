@@ -13,7 +13,10 @@ import (
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+	"sync/atomic"
 )
+
+var tradeSeq uint64
 
 // ---- TimescaleDB Table Models (GORM) ----
 
@@ -265,8 +268,10 @@ func (s *Store) StartPipeline(lobStream <-chan models.LOBSnapshot) {
 
 func (s *Store) HandleTrade(trade models.TradeMessage) {
 	// 1. Persist raw trade to TimescaleDB hypertable
+	seq := atomic.AddUint64(&tradeSeq, 1)
+
 	record := TradeRecord{
-		ID:           fmt.Sprintf("%s-%d", trade.TakerOrderID, trade.Timestamp),
+		ID:           fmt.Sprintf("%s-%d-%d", trade.TakerOrderID, trade.Timestamp, seq),
 		Symbol:       trade.Symbol,
 		Price:        trade.Price,
 		Quantity:     trade.Quantity,

@@ -162,55 +162,50 @@ func (h *Handler) CreatePortfolio(userID uint) error {
 
 func (h *Handler) UpdatePortfolioAfterTrade(trade models.TradeMessage) error {
     if trade.MakerUserID == trade.TakerUserID {
-        // No portfolio update needed for self-trades
         return nil
     }
 
     var order *models.Order
     var err error
-    var isMakerBuyer bool // NEW: Track exactly who the buyer is
+    var isMakerBuyer bool
 
     if strings.HasPrefix(trade.MakerOrderID, "ORD-") {
         order, err = h.Store.GetOrderByID(trade.MakerOrderID)
         if err != nil {
             return fmt.Errorf("failed to fetch maker order %s: %w", trade.MakerOrderID, err)
         }
-        // If we fetched the Maker's order, they are the buyer if their side is Buy
-        isMakerBuyer = order.Side == models.Buy 
-
+        isMakerBuyer = order.Side == models.Buy
     } else if strings.HasPrefix(trade.TakerOrderID, "ORD-") {
         order, err = h.Store.GetOrderByID(trade.TakerOrderID)
         if err != nil {
             return fmt.Errorf("failed to fetch taker order %s: %w", trade.TakerOrderID, err)
         }
-        // If we fetched the Taker's order, the Maker is the buyer if the Taker's side is Sell
-        isMakerBuyer = order.Side == models.Sell 
-
+        isMakerBuyer = order.Side == models.Sell
     } else {
-        return fmt.Errorf("invalid order IDs in trade message: %s, %s", trade.MakerOrderID, trade.TakerOrderID)
+        // Both are synthetic/noise — no real user to update
+        return nil
     }
 
-    // Now route them to the correct functions!
     if isMakerBuyer {
-        // Maker is the Buyer, Taker is the Seller
-        if trade.MakerUserID != 0 {
+        // Maker=Buyer, Taker=Seller
+        if trade.MakerUserID != 0 && trade.MakerUserID < 900000000 {
             if err := h.HandleUpdatePortfolioAfterTradeOfBuyer(trade, fmt.Sprintf("%d", trade.MakerUserID)); err != nil {
                 return fmt.Errorf("failed to update buyer's portfolio: %w", err)
             }
         }
-        if trade.TakerUserID != 0 {
+        if trade.TakerUserID != 0 && trade.TakerUserID < 900000000 {
             if err := h.HandleUpdatePortfolioAfterTradeOfSeller(trade, fmt.Sprintf("%d", trade.TakerUserID)); err != nil {
                 return fmt.Errorf("failed to update seller's portfolio: %w", err)
             }
         }
     } else {
-        // Maker is the Seller, Taker is the Buyer
-        if trade.MakerUserID != 0 {
+        // Maker=Seller, Taker=Buyer
+        if trade.MakerUserID != 0 && trade.MakerUserID < 900000000 {
             if err := h.HandleUpdatePortfolioAfterTradeOfSeller(trade, fmt.Sprintf("%d", trade.MakerUserID)); err != nil {
                 return fmt.Errorf("failed to update seller's portfolio: %w", err)
             }
         }
-        if trade.TakerUserID != 0 {
+        if trade.TakerUserID != 0 && trade.TakerUserID < 900000000 {
             if err := h.HandleUpdatePortfolioAfterTradeOfBuyer(trade, fmt.Sprintf("%d", trade.TakerUserID)); err != nil {
                 return fmt.Errorf("failed to update buyer's portfolio: %w", err)
             }
@@ -226,22 +221,32 @@ func (h *Handler) HandleUpdatePortfolioAfterTradeOfBuyer(trade models.TradeMessa
 		return fmt.Errorf("failed to fetch portfolio: %w", err)
 	}
 
+	// Deduct the cost from the buyer's balance
+	cost := trade.Price * float64(trade.Quantity)
+	if err := h.DB.Primary.Model(&portfolio).
+		UpdateColumn("balance", gorm.Expr("balance - ?", cost)).Error; err != nil {
+		return fmt.Errorf("failed to deduct balance: %w", err)
+	}
+
 	found := false
 	for i := range portfolio.Holdings {
 		if portfolio.Holdings[i].Symbol == trade.Symbol {
-			portfolio.Holdings[i].Quantity += trade.Quantity
+			oldQty := portfolio.Holdings[i].Quantity
+			oldAvg := portfolio.Holdings[i].AvgPrice
+			newQty := oldQty + trade.Quantity
 
-			// Explicitly save the specific holding we just modified
+			// Update weighted average price
+			portfolio.Holdings[i].AvgPrice = (oldAvg*float64(oldQty) + trade.Price*float64(trade.Quantity)) / float64(newQty)
+			portfolio.Holdings[i].Quantity = newQty
+
 			if err := h.DB.Primary.Save(&portfolio.Holdings[i]).Error; err != nil {
 				return fmt.Errorf("failed to update holding: %w", err)
 			}
-
 			found = true
 			break
 		}
 	}
 
-	// If the loop finished and we never found the symbol, create it NOW
 	if !found {
 		newHolding := models.Holding{
 			PortfolioID: portfolio.ID,
