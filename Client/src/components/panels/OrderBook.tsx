@@ -50,7 +50,7 @@ export function OrderBook({ symbol }: OrderBookProps) {
       </div>
 
       {/* Asks (Red) */}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col justify-end">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col justify-start">
         {asks.length === 0 ? (
           <div className="text-center text-muted py-4">Waiting for data...</div>
         ) : (
