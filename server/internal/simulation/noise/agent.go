@@ -3,8 +3,9 @@ package noise
 import (
 	"context" // NEW: For graceful shutdown
 	"fmt"
-	"log"
 	"math"
+
+	// "log"
 	"math/rand"
 	"time"
 
@@ -142,7 +143,7 @@ func (a *Agent) Start(ctx context.Context, symbols []string, sessionDuration tim
 
 					select {
 					case a.orderStream <- order:
-						log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, state.marketPrice)
+						// log.Printf("🌪️ [NOISE TRADER] Fired %s MARKET order for %d shares of %s (Reacting to Price: ₹%.2f)", order.Side, order.Quantity, order.Symbol, state.marketPrice)
 					default:
 					}
 
