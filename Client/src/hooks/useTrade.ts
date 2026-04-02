@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { API_BASE_URL } from "../config";
 
 // We now accept a direct function to call when data arrives
 export function useTradeWebSocket(symbol: string, onNewData: (data: any) => void) {
@@ -10,7 +11,7 @@ export function useTradeWebSocket(symbol: string, onNewData: (data: any) => void
         const token = localStorage.getItem('access_token');
         if (!token) return;
 
-        const wsUrl = `ws://localhost:8080/v1/ws?token=${token}`;
+        const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
