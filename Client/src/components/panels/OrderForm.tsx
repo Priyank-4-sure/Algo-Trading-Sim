@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePortfolio } from '../../hooks/usePortfolio'; 
 import { useTradeWebSocket } from '../../hooks/useTrade'; 
+import { API_BASE_URL } from "../../config";
 
 interface OrderFormProps {
    symbol: string;
@@ -83,7 +84,7 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
           return;
        }
 
-       const response = await fetch('http://localhost:8080/v1/orders', {
+       const response = await fetch(`${API_BASE_URL}/orders`, {
          method: 'POST',
          headers: {
            'Content-Type': 'application/json',
