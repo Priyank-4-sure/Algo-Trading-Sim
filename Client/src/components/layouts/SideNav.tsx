@@ -5,9 +5,11 @@ import { NavLink } from 'react-router-dom';
 
 interface SideNavProps {
   onLogout: () => void;
+  isMobileOpen?: boolean;
+  closeMobileNav?: () => void;
 }
 
-export function SideNav({ onLogout }: SideNavProps) {
+export function SideNav({ onLogout, isMobileOpen, closeMobileNav }: SideNavProps) {
   const [expanded, setExpanded] = useState(false);
 
   // 2. Added the Watchlist object to the navItems array
@@ -20,7 +22,21 @@ export function SideNav({ onLogout }: SideNavProps) {
   ];
 
   return (
-    <aside className={`${expanded ? 'w-48' : 'w-16'} hidden md:flex flex-col items-center py-3 border-r border-main bg-panel shrink-0 z-20 transition-all duration-300 ease-in-out relative font-sans`}>
+    <>
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm" 
+          onClick={closeMobileNav}
+        />
+      )}
+      <aside className={`
+        ${expanded ? 'w-48' : 'w-16'} 
+        fixed inset-y-0 left-0 z-50 md:relative md:z-20
+        flex flex-col items-center py-3 border-r border-main bg-panel shrink-0 
+        transition-all duration-300 ease-in-out font-sans
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
       <div className={`flex items-center mb-6 transition-all ${expanded ? 'w-full px-3' : 'justify-center w-full'}`}>
         <button
           onClick={() => setExpanded(!expanded)}
@@ -37,6 +53,7 @@ export function SideNav({ onLogout }: SideNavProps) {
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={() => { if (closeMobileNav) closeMobileNav(); }}
             title={expanded ? '' : item.label}
             className={({ isActive }) => `
               h-10 flex items-center rounded-xl transition-all duration-200 group relative
@@ -71,6 +88,7 @@ export function SideNav({ onLogout }: SideNavProps) {
           {expanded && <span className="font-medium text-sm whitespace-nowrap overflow-hidden">Log Out</span>}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

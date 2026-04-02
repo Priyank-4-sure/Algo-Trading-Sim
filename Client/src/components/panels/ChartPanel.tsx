@@ -1,7 +1,23 @@
 import { createChart, IChartApi, CrosshairMode, LineStyle } from 'lightweight-charts';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Crosshair, Type, Minus, BarChart2, Grid } from 'lucide-react';
+import {
+  Crosshair, Grid, BarChart2,
+  TrendingUp, GitBranch,
+  Trash2, Eraser, Type, Minus, BarChart3, RotateCcw,
+} from 'lucide-react';
 import { useTradeWebSocket } from '../../hooks/useTrade';
+import { DrawingManager, DrawingPoint } from './chart/drawingManager';
+import { OHLCOverlay, OHLCOverlayHandle } from './chart/OHLCOverlay';
+
+// ─── Types ────────────────────────────────────────────────────────────────
+
+type ToolType =
+  | 'cursor'
+  | 'trendLine'
+  | 'channel'
+  | 'text'
+  | 'hLine'
+  | 'delete';
 
 interface ChartPanelProps {
   darkMode: boolean;
@@ -9,38 +25,95 @@ interface ChartPanelProps {
   symbol: string;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────
+
 export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef          = useRef<IChartApi | null>(null);
   const seriesRef         = useRef<any>(null);
   const volumeSeriesRef   = useRef<any>(null);
 
-  const [activeTool, setActiveTool] = useState<'cursor' | 'text' | 'priceLine'>('cursor');
+  const [activeTool, setActiveTool] = useState<ToolType>('cursor');
   const [chartType,  setChartType]  = useState<'candlestick' | 'line'>('candlestick');
-  const [showGrid,   setShowGrid]   = useState(true);
+  const [showGrid,      setShowGrid]      = useState(true);
+  const [showVolume,    setShowVolume]    = useState<boolean>(
+    () => localStorage.getItem('chart_showVolume') !== 'false'
+  );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const activeToolRef = useRef(activeTool);
+  // Keep showVolume accessible inside chart useEffect without retriggering it
+  const showVolumeRef = useRef(showVolume);
+
+  // Refs for event handler access (avoid stale closures)
+  const activeToolRef    = useRef<ToolType>(activeTool);
+  const pendingPointsRef = useRef<DrawingPoint[]>([]);
+  const drawingMgrRef    = useRef<DrawingManager>(new DrawingManager());
+  const ohlcRef          = useRef<OHLCOverlayHandle>(null);
+
+  // Keep darkMode accessible inside chart useEffect without re-running it
+  const darkModeRef = useRef(darkMode);
+  useEffect(() => { darkModeRef.current = darkMode; }, [darkMode]);
+
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
-  const markersRef     = useRef<any[]>([]);
-  const allCandlesRef  = useRef<any[]>([]); // Full history received on WS connect
-  const loadedCountRef = useRef(0);         // How many candles are currently rendered
-  const isFetchingRef  = useRef(false);     // Debounce guard
+  const allCandlesRef  = useRef<any[]>([]);
+  const loadedCountRef = useRef(0);
+  const isFetchingRef  = useRef(false);
 
-  // ---- Live-data handler (WS hook calls this) ----
+  // ─── Safe tool switch ──────────────────────────────────────────────
+
+  const switchTool = useCallback((tool: ToolType) => {
+    pendingPointsRef.current = [];
+    setActiveTool(tool);
+  }, []);
+
+  // ─── Escape key handler ────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        pendingPointsRef.current = [];
+        setActiveTool('cursor');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // ─── Delete All handler ────────────────────────────────────────────
+
+  const handleDeleteAll = useCallback(() => {
+    try {
+      drawingMgrRef.current.deleteAll();
+    } catch {
+      // Safety catch
+    }
+  }, []);
+
+  // ─── Reset chart handler ───────────────────────────────────────────
+
+  const handleResetChart = useCallback(() => {
+    try {
+      if (chartRef.current) {
+        chartRef.current.timeScale().fitContent();
+      }
+    } catch {
+      // Safety catch
+    }
+  }, []);
+
+  // ─── Live data handler ────────────────────────────────────────────
+
   const handleLiveTick = useCallback((liveData: any, isHistorical: boolean) => {
     if (!seriesRef.current || !liveData) return;
 
-    // 10-minute window: 600 bars @ 1s, 120 bars @ 5s
     const chunkSize = timeframe === '5s' ? 120 : 600;
 
     try {
       if (isHistorical && Array.isArray(liveData)) {
-        // Store the full history in memory, render only the last 10 minutes initially
-        allCandlesRef.current  = liveData;
+        allCandlesRef.current = liveData;
 
-        const toTime  = (c: any) => Math.floor(new Date(c.bucket_time).getTime() / 1000) as any;
+        const toTime = (c: any) => Math.floor(new Date(c.bucket_time).getTime() / 1000) as any;
         const initial = liveData.slice(-chunkSize);
 
         if (chartType === 'candlestick') {
@@ -63,7 +136,6 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
         return;
       }
 
-      // Live tick — update the in-progress candle
       const t = Math.floor(new Date(liveData.bucket_time).getTime() / 1000);
 
       if (chartType === 'candlestick') {
@@ -85,15 +157,17 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
   useTradeWebSocket(symbol, timeframe, handleLiveTick);
 
-  // ---- Create / recreate chart ----
+  // ─── Create / recreate chart ──────────────────────────────────────
+
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Reset state for new chart instance
-    markersRef.current     = [];
     allCandlesRef.current  = [];
     loadedCountRef.current = 0;
     isFetchingRef.current  = false;
+    pendingPointsRef.current = [];
+
+    drawingMgrRef.current.destroyAll();
 
     const chunkSize = timeframe === '5s' ? 120 : 600;
     const gridColor = showGrid ? (darkMode ? '#1E1E1E' : '#e0e0e0') : 'transparent';
@@ -115,10 +189,12 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
       rightPriceScale: { borderColor: darkMode ? '#1E1E1E' : '#e0e0e0' },
       crosshair: { mode: CrosshairMode.Normal },
       autoSize: true,
+      watermark: { visible: false },
     });
 
     chartRef.current = chart;
 
+    // Main series
     let mainSeries: any;
     if (chartType === 'candlestick') {
       mainSeries = chart.addCandlestickSeries({
@@ -133,21 +209,29 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     }
     seriesRef.current = mainSeries;
 
+    // Bind drawing manager to chart + main series
+    drawingMgrRef.current.setChart(chart, mainSeries);
+
+    // Volume series
     const volSeries = chart.addHistogramSeries({
       color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '',
     });
     volumeSeriesRef.current = volSeries;
     chart.priceScale('').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
+    // Apply persisted visibility immediately (before data loads)
+    volSeries.applyOptions({ visible: showVolumeRef.current });
+
     mainSeries.setData([]);
     volSeries.setData([]);
 
-    // ---- Load next 10-min chunk when scrolling to the left edge ----
+    // ─── Lazy-load on scroll ────────────────────────────────────────
+
     const loadMoreCandles = () => {
       if (isFetchingRef.current) return;
       const all    = allCandlesRef.current;
       const loaded = loadedCountRef.current;
-      if (loaded >= all.length) return; // Full history already shown
+      if (loaded >= all.length) return;
 
       isFetchingRef.current = true;
       setIsLoadingMore(true);
@@ -157,7 +241,6 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
       const newOldestIdx = Math.max(0, oldestIdx - chunkSize);
       const newSlice     = all.slice(newOldestIdx);
 
-      // Snapshot the current visible range so the view doesn't jump after prepend
       const visibleRange = chart.timeScale().getVisibleRange();
 
       if (chartType === 'candlestick') {
@@ -176,69 +259,181 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
         color: c.close >= c.open ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)',
       })));
 
-      // Restore the visible time range so the user stays at the same position
       if (visibleRange) {
         chart.timeScale().setVisibleRange(visibleRange);
       }
 
       loadedCountRef.current = newSlice.length;
 
-      // Release the debounce lock after a short delay
       setTimeout(() => {
         isFetchingRef.current = false;
         setIsLoadingMore(false);
       }, 400);
     };
 
-    // Fire when user scrolls — load more when they reach the left edge (bar index ≤ 3)
     const handleRangeChange = (range: any) => {
       if (!range) return;
       if (range.from <= 3) loadMoreCandles();
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(handleRangeChange);
 
-    // ---- Click tools ----
+    // ─── Click handler (drawing tools) ──────────────────────────────
+
     const handleChartClick = (param: any) => {
-      if (!param.point || !param.time) return;
-      const tool = activeToolRef.current;
+      try {
+        if (!param || !param.point || param.time == null) return;
 
-      if (tool === 'text') {
         const price = mainSeries.coordinateToPrice(param.point.y);
-        if (price == null) return;
-        const marker = {
-          time: param.time, position: 'aboveBar' as const,
-          color: '#f59e0b', shape: 'arrowDown' as const, text: 'Mark',
-        };
-        const updated = [...markersRef.current, marker].sort((a, b) => a.time - b.time);
-        markersRef.current = updated;
-        mainSeries.setMarkers(updated);
+        if (price == null || !isFinite(price)) return;
 
-      } else if (tool === 'priceLine') {
-        const price = mainSeries.coordinateToPrice(param.point.y);
-        if (price == null) return;
-        mainSeries.createPriceLine({
-          price, color: '#3b82f6', lineWidth: 1,
-          lineStyle: LineStyle.Dashed, axisLabelVisible: true,
-          title: `$${price.toFixed(2)}`,
-        });
+        const time = typeof param.time === 'number'
+          ? param.time
+          : Math.floor(new Date(param.time).getTime() / 1000);
+
+        if (!isFinite(time)) return;
+
+        const clickPoint: DrawingPoint = { time, price };
+        const tool = activeToolRef.current;
+        const mgr = drawingMgrRef.current;
+
+        switch (tool) {
+          case 'cursor':
+            break;
+
+          case 'trendLine': {
+            pendingPointsRef.current.push(clickPoint);
+            if (pendingPointsRef.current.length >= 2) {
+              const [p1, p2] = pendingPointsRef.current;
+              mgr.addTrendLine(p1, p2);
+              pendingPointsRef.current = [];
+            }
+            break;
+          }
+
+          case 'channel': {
+            pendingPointsRef.current.push(clickPoint);
+            if (pendingPointsRef.current.length >= 3) {
+              const [p1, p2, p3] = pendingPointsRef.current;
+              mgr.addChannel(p1, p2, p3);
+              pendingPointsRef.current = [];
+            }
+            break;
+          }
+
+          case 'text': {
+            // Prompt user for text input
+            try {
+              const input = window.prompt('Enter text label:');
+              if (input && input.trim().length > 0) {
+                mgr.addText(clickPoint, input);
+              }
+            } catch {
+              // prompt can throw in some environments
+            }
+            break;
+          }
+
+          case 'hLine': {
+            // Prompt for optional label
+            try {
+              const input = window.prompt('Enter label (optional):');
+              const label = input && input.trim().length > 0 ? input : undefined;
+              mgr.addHorizontalLine(clickPoint, label);
+            } catch {
+              // prompt can throw in some environments
+            }
+            break;
+          }
+
+          case 'delete': {
+            mgr.deleteNearest(clickPoint);
+            break;
+          }
+
+          default:
+            break;
+        }
+      } catch (err) {
+        console.error('Chart click handler error:', err);
       }
     };
     chart.subscribeClick(handleChartClick);
 
+    // ─── OHLC on crosshair move ──────────────────────────────────────
+    //
+    // We subscribe here (not in a child component) so that `mainSeries`
+    // is the exact same object the chart holds as a Map key.
+
+    const handleCrosshairMove = (param: any) => {
+      try {
+        const overlay = ohlcRef.current;
+        if (!overlay) return;
+
+        if (!param || param.time == null) {
+          // Cursor has left the chart
+          overlay.clear();
+          return;
+        }
+
+        // Try seriesData (v4.1+) then seriesPrices (older v4)
+        let data: any = null;
+        if (param.seriesData && typeof param.seriesData.get === 'function') {
+          data = param.seriesData.get(mainSeries);
+        }
+        if (!data && param.seriesPrices && typeof param.seriesPrices.get === 'function') {
+          data = param.seriesPrices.get(mainSeries);
+        }
+
+        if (
+          data &&
+          typeof data.open === 'number' && isFinite(data.open) &&
+          typeof data.high === 'number' && isFinite(data.high) &&
+          typeof data.low  === 'number' && isFinite(data.low)  &&
+          typeof data.close === 'number' && isFinite(data.close)
+        ) {
+          overlay.update(data.open, data.high, data.low, data.close, darkModeRef.current);
+        }
+        // If no data for this tick, leave last display as-is
+      } catch {
+        // Silently ignore
+      }
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    // ─── Resize ─────────────────────────────────────────────────────
+
     const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth });
     window.addEventListener('resize', handleResize);
 
+    // ─── Cleanup ────────────────────────────────────────────────────
+
     return () => {
       window.removeEventListener('resize', handleResize);
-      chart.unsubscribeClick(handleChartClick);
-      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
-      chart.remove();
+      try { chart.unsubscribeClick(handleChartClick); } catch { /* noop */ }
+      try { chart.unsubscribeCrosshairMove(handleCrosshairMove); } catch { /* noop */ }
+      try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange); } catch { /* noop */ }
+      drawingMgrRef.current.destroyAll();
+      try { chart.remove(); } catch { /* noop */ }
     };
-  // showGrid excluded — handled by its own effect
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [darkMode, chartType, timeframe, symbol]);
 
-  // ---- Grid toggle without chart rebuild ----
+  // ─── Volume visibility (no chart rebuild needed) ─────────────────
+
+  useEffect(() => {
+    showVolumeRef.current = showVolume;
+    localStorage.setItem('chart_showVolume', String(showVolume));
+    if (volumeSeriesRef.current) {
+      try {
+        volumeSeriesRef.current.applyOptions({ visible: showVolume });
+      } catch {
+        // series might not exist yet
+      }
+    }
+  }, [showVolume]);
+
+  // ─── Grid toggle without chart rebuild ────────────────────────────
+
   useEffect(() => {
     if (!chartRef.current) return;
     const color = showGrid ? (darkMode ? '#1E1E1E' : '#e0e0e0') : 'transparent';
@@ -250,50 +445,95 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     });
   }, [showGrid, darkMode]);
 
+  // ─── Derived state ────────────────────────────────────────────────
+
   const cursorStyle = activeTool === 'cursor' ? 'default' : 'crosshair';
+
+  // ─── Toolbar button helper ────────────────────────────────────────
+
+  const ToolBtn = ({ tool, title, icon: Icon }: { tool: ToolType; title: string; icon: any }) => (
+    <button
+      onClick={() => switchTool(tool)}
+      className={`p-1.5 rounded-md transition-all border ${
+        activeTool === tool
+          ? 'bg-main text-main border-white/20'
+          : 'text-muted hover:text-main hover:bg-main/50 border-transparent'
+      }`}
+      title={title}
+    >
+      <Icon size={20} />
+    </button>
+  );
+
+  // ─── Render ───────────────────────────────────────────────────────
 
   return (
     <div className="flex w-full h-full bg-panel font-sans">
-      {/* Toolbar */}
-      <div className="w-12 shrink-0 border-r border-main flex flex-col items-center py-2 gap-3 bg-panel transition-colors">
+      {/* Left Toolbar — responsive and compact with hidden scrollbar */}
+      <div className="shrink-0 border-r border-main flex flex-col items-center py-1 px-1 gap-0.5 bg-panel transition-colors overflow-y-auto max-h-full no-scrollbar">
+        <ToolBtn tool="cursor"        title="Cursor"                     icon={Crosshair} />
+        <ToolBtn tool="trendLine"     title="Trend Line (2 clicks)"     icon={TrendingUp} />
+        <ToolBtn tool="channel"       title="Parallel Channel (3 clicks)" icon={GitBranch} />
+        <ToolBtn tool="hLine"        title="Horizontal Level (click to place)" icon={Minus} />
+        <ToolBtn tool="text"          title="Text Label (click to place)" icon={Type} />
+        <ToolBtn tool="delete"        title="Delete Drawing (click nearest)" icon={Trash2} />
+
+        {/* Delete All button — always visible, not a "tool" */}
         <button
-          onClick={() => setActiveTool('cursor')}
-          className={`p-2 rounded-md transition-all border ${activeTool === 'cursor' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
-          title="Cursor"
-        ><Crosshair size={18} /></button>
+          onClick={handleDeleteAll}
+          className="p-1.5 rounded-md transition-all border text-muted hover:text-red-400 hover:bg-red-500/10 border-transparent"
+          title="Delete All Drawings"
+        >
+          <Eraser size={20} />
+        </button>
 
         <button
-          onClick={() => setActiveTool('text')}
-          className={`p-2 rounded-md transition-all border ${activeTool === 'text' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
-          title="Add Marker — click chart"
-        ><Type size={18} /></button>
+          onClick={() => setChartType(t => t === 'candlestick' ? 'line' : 'candlestick')}
+          className={`p-1.5 rounded-md transition-all border ${chartType === 'line' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
+          title="Toggle Chart Type"
+        >
+          <BarChart2 size={20} />
+        </button>
 
         <button
-          onClick={() => setActiveTool('priceLine')}
-          className={`p-2 rounded-md transition-all border ${activeTool === 'priceLine' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
-          title="Price Line — click chart"
-        ><Minus size={18} /></button>
+          onClick={() => setShowVolume(v => !v)}
+          className={`p-1.5 rounded-md transition-all border ${
+            showVolume
+              ? 'bg-main text-main border-white/20'
+              : 'text-muted hover:text-main hover:bg-main/50 border-transparent'
+          }`}
+          title={showVolume ? 'Hide Volume' : 'Show Volume'}
+        >
+          <BarChart3 size={20} />
+        </button>
 
         <button
           onClick={() => setShowGrid(g => !g)}
-          className={`p-2 rounded-md transition-all border ${showGrid ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
+          className={`p-1.5 rounded-md transition-all border ${showGrid ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
           title="Toggle Grid"
-        ><Grid size={18} /></button>
+        >
+          <Grid size={20} />
+        </button>
 
-        <div className="w-6 border-t border-main/50 my-1" />
-
-        <div className="mt-auto pb-2">
-          <button
-            onClick={() => setChartType(t => t === 'candlestick' ? 'line' : 'candlestick')}
-            className={`p-2 rounded-md transition-all border ${chartType === 'line' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
-            title="Toggle Chart Type"
-          ><BarChart2 size={18} /></button>
-        </div>
+        <button
+          onClick={handleResetChart}
+          className="p-1.5 rounded-md transition-all border text-muted hover:text-main hover:bg-main/50 border-transparent"
+          title="Reset Chart"
+        >
+          <RotateCcw size={20} />
+        </button>
       </div>
 
-      {/* Chart + loading indicator */}
+      {/* Chart area */}
       <div className="relative flex-1 min-w-0 h-full">
         <div ref={chartContainerRef} style={{ cursor: cursorStyle }} className="w-full h-full" />
+
+        {/* OHLC overlay — always mounted; hidden when not hovering */}
+        {chartType === 'candlestick' && (
+          <OHLCOverlay ref={ohlcRef} />
+        )}
+
+        {/* Loading indicator */}
         {isLoadingMore && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-panel/90 border border-main text-muted text-xs px-3 py-1 rounded-full pointer-events-none select-none">
             Loading older candles…
