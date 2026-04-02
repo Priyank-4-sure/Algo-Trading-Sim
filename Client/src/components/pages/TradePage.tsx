@@ -20,10 +20,21 @@ export function TradePage({ darkMode }: TradePageProps) {
   const [timeframe, setTimeframe] = useState('1m');
 
   // Custom Resizability State
-  const [leftWidth, setLeftWidth] = useState(20);
-  const [rightWidth, setRightWidth] = useState(25);
+  const [leftWidth, setLeftWidth] = useState(280);
+  const [rightWidth, setRightWidth] = useState(320);
   const [chartHeight, setChartHeight] = useState(70);
   const [orderFormHeight, setOrderFormHeight] = useState(70);
+
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const isResizing = useRef<string | null>(null);
 
@@ -48,11 +59,11 @@ export function TradePage({ darkMode }: TradePageProps) {
     const { innerWidth } = window;
 
     if (isResizing.current === 'left-width') {
-      const newWidth = (clientX / innerWidth) * 100;
-      if (newWidth > 10 && newWidth < 40) setLeftWidth(newWidth);
+      const newWidth = Math.max(150, Math.min(clientX, 600));
+      setLeftWidth(newWidth);
     } else if (isResizing.current === 'right-width') {
-      const newWidth = ((innerWidth - clientX) / innerWidth) * 100;
-      if (newWidth > 15 && newWidth < 40) setRightWidth(newWidth);
+      const newWidth = Math.max(200, Math.min(innerWidth - clientX, 600));
+      setRightWidth(newWidth);
     } else if (isResizing.current === 'chart-height') {
       const container = document.getElementById('middle-panel');
       if (container) {
@@ -74,15 +85,14 @@ export function TradePage({ darkMode }: TradePageProps) {
     return () => stopResizing();
   }, [stopResizing]);
 
-  const middleWidth = 100 - leftWidth - rightWidth;
   const timeframes = ['1s', '5s'];
 
   return (
-    <div className="flex w-full h-full gap-0 overflow-hidden select-none">
+    <div className="flex flex-col md:flex-row w-full h-full gap-0 overflow-y-auto md:overflow-hidden select-none">
       {/* LEFT PANEL: Order Book */}
       <div
-        style={{ width: `${leftWidth}%` }}
-        className="hidden md:flex flex-col pr-[2px] h-full min-w-[150px]"
+        style={{ width: isDesktop ? `${leftWidth}px` : '100%' }}
+        className="flex flex-col md:pr-[2px] h-[400px] md:h-full min-w-[150px] order-3 md:order-none shrink-0 mt-[2px] md:mt-0"
       >
         <div className="flex-1 glass-panel rounded-lg flex flex-col overflow-hidden">
           <div className="px-3 py-2 border-b border-main font-semibold text-sm">
@@ -106,13 +116,13 @@ export function TradePage({ darkMode }: TradePageProps) {
       {/* MIDDLE PANEL: Chart & Positions */}
       <div
         id="middle-panel"
-        style={{ width: `${middleWidth}%` }}
-        className="flex flex-col px-[2px] h-full flex-1"
+        style={{ width: isDesktop ? `calc(100% - ${leftWidth + rightWidth}px - 8px)` : '100%' }}
+        className="flex flex-col md:px-[2px] h-auto md:h-full flex-1 order-1 md:order-none min-w-0"
       >
         <div className="flex flex-col h-full overflow-hidden">
           {/* Chart Section */}
           <div
-            style={{ height: isFullscreen ? '100vh' : `${chartHeight}%` }}
+            style={{ height: isFullscreen ? '100vh' : (isDesktop ? `${chartHeight}%` : '400px') }}
             className={`transition-all duration-300 ease-in-out ${isFullscreen ? "fixed inset-0 z-[100]" : "pb-[2px] shrink-0"}`}
           >
             <div className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${isFullscreen ? 'rounded-none border-none bg-panel' : 'glass-panel rounded-lg'}`}>
@@ -172,13 +182,13 @@ export function TradePage({ darkMode }: TradePageProps) {
           {/* Vertical Divider 1 */}
           <div
             onMouseDown={startResizing('chart-height')}
-            className="h-1 shrink-0 hover:bg-panel cursor-row-resize transition-all flex items-center justify-center group"
+            className="h-1 shrink-0 hover:bg-panel cursor-row-resize transition-all hidden md:flex items-center justify-center group"
           >
             <div className="h-[1px] w-8 bg-panel/50" />
           </div>
 
           {/* Positions Section */}
-          <div className="flex-1 min-h-0 pt-[2px]">
+          <div className="flex-1 min-h-[250px] md:min-h-0 pt-[2px] md:pt-0 shrink-0">
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
                 <span>Positions</span>
@@ -253,13 +263,13 @@ export function TradePage({ darkMode }: TradePageProps) {
       {/* RIGHT PANEL: Order Form & Balances */}
       <div
         id="right-panel"
-        style={{ width: `${rightWidth}%` }}
-        className="hidden md:flex flex-col pl-[2px] h-full min-w-[200px]"
+        style={{ width: isDesktop ? `${rightWidth}px` : '100%' }}
+        className="flex flex-col md:pl-[2px] h-auto md:h-full min-w-[200px] order-2 md:order-none shrink-0 mt-[2px] md:mt-0"
       >
         <div className="flex flex-col h-full overflow-hidden">
           <div
-            style={{ height: `${orderFormHeight}%` }}
-            className="pb-[2px] shrink-0"
+            style={{ height: isDesktop ? `${orderFormHeight}%` : 'auto' }}
+            className="pb-[2px] shrink-0 min-h-[350px] md:min-h-0"
           >
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
               {/* Pass active symbol to OrderForm */}
@@ -270,12 +280,12 @@ export function TradePage({ darkMode }: TradePageProps) {
           {/* Vertical Divider 2 */}
           <div
             onMouseDown={startResizing('order-form-height')}
-            className="h-1 shrink-0 hover:bg-panel cursor-row-resize transition-all flex items-center justify-center group"
+            className="h-1 shrink-0 hover:bg-panel cursor-row-resize transition-all hidden md:flex items-center justify-center group"
           >
             <div className="h-[1px] w-8 bg-panel/50" />
           </div>
 
-          <div className="flex-1 min-h-0 pt-[2px]">
+          <div className="flex-1 min-h-[200px] md:min-h-0 pt-[2px] md:pt-0 shrink-0">
             <div className="h-full glass-panel rounded-lg flex flex-col overflow-hidden">
               {/* Pass active symbol to Balances */}
               <Balances />
