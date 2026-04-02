@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { API_BASE_URL } from "../config";
 
 export function useTradeWebSocket(
     symbol: string,
@@ -14,7 +15,7 @@ export function useTradeWebSocket(
         if (!token) return;
 
         const topic = `candles:${symbol}:${timeframe}`;
-        const wsUrl = `ws://localhost:8080/v1/ws?token=${token}`;
+        const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

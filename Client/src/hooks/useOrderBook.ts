@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "../config";
 
 export interface PriceLevel {
   price: number;
@@ -22,7 +23,8 @@ export function useOrderBook(symbol: string) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    const ws = new WebSocket(`ws://localhost:8080/v1/ws?token=${token}`);
+    const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
