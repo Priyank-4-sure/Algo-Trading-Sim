@@ -78,9 +78,7 @@ export function SignUpPage({ darkMode, toggleDarkMode }: SignUpPageProps) {
   };
 
   return (
-    <div className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-500 ${
-      darkMode ? 'bg-[#0f172a]' : 'bg-slate-50'
-    }`}>
+    <div className="min-h-screen w-full flex flex-col font-sans transition-colors duration-500 bg-main text-main">
       
       {/* ─── SHARED TOP NAVIGATION ─── */}
       <GuestTopNav 

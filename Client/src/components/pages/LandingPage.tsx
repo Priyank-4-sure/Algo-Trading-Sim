@@ -18,9 +18,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const navigate = useNavigate(); // 3. Initialize the navigate function
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-500 relative ${
-      darkMode ? 'bg-[#020617] text-white' : 'bg-slate-50 text-slate-900'
-    }`}>
+    <div className="min-h-screen flex flex-col transition-colors duration-500 relative bg-main text-main">
       
       {/* --- BACKGROUND ELEMENTS (Keep your existing JSX here) --- */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
@@ -61,16 +59,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* ─── DASHBOARD PREVIEW MOCKUP ─── */}
         {/* Enhanced depth and contrast for light mode */}
-        <div className={`w-full max-w-[1200px] h-[500px] rounded-t-3xl border-[6px] border-b-0 relative overflow-hidden transition-all duration-500 ${
-          darkMode 
-            ? 'border-slate-800 bg-slate-900 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)]' 
-            : 'border-slate-200/80 bg-white shadow-[0_40px_100px_-20px_rgba(15,23,42,0.15)]'
-        }`}>
+        <div className="w-full max-w-[1200px] h-[500px] rounded-t-3xl border-[6px] border-b-0 relative overflow-hidden transition-all duration-500 border-subtle bg-panel shadow-2xl">
            
            {/* Mockup Header */}
-           <div className={`h-12 border-b flex items-center px-4 gap-2 transition-colors duration-500 ${
-             darkMode ? 'border-slate-800 bg-[#020617]' : 'border-slate-100 bg-slate-50'
-           }`}>
+           <div className="h-12 border-b flex items-center px-4 gap-2 transition-colors duration-500 border-subtle bg-panel">
              <div className="flex gap-1.5">
                <div className="w-3 h-3 rounded-full bg-red-400/80 shadow-sm" />
                <div className="w-3 h-3 rounded-full bg-amber-400/80 shadow-sm" />
@@ -79,21 +71,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
            </div>
            
            {/* Fade-out Gradient Overlay */}
-           <div className={`absolute inset-0 top-12 bg-gradient-to-t via-transparent to-transparent z-10 pointer-events-none ${
-             darkMode ? 'from-[#020617]' : 'from-slate-50'
-           }`} />
+           <div className="absolute inset-0 top-12 bg-gradient-to-t via-transparent to-transparent z-10 pointer-events-none from-[var(--trading-panel)]" />
            
            {/* Mockup Content Blocks */}
            <div className="w-full h-full p-6 flex gap-4 opacity-60 blur-[2px]">
-             <div className={`w-1/4 h-full rounded-xl border ${
-               darkMode ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-50 border-slate-200'
-             }`} />
-             <div className={`w-1/2 h-full rounded-xl border ${
-               darkMode ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-50 border-slate-200'
-             }`} />
-             <div className={`w-1/4 h-full rounded-xl border ${
-               darkMode ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-50 border-slate-200'
-             }`} />
+             <div className="w-1/4 h-full rounded-xl border border-subtle bg-panel" />
+             <div className="w-1/2 h-full rounded-xl border border-subtle bg-panel" />
+             <div className="w-1/4 h-full rounded-xl border border-subtle bg-panel" />
            </div>
         </div>
       </main>

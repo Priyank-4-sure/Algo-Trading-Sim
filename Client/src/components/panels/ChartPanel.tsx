@@ -25,6 +25,13 @@ interface ChartPanelProps {
   symbol: string;
 }
 
+interface PendingPromptState {
+  tool: 'text' | 'hLine';
+  point: DrawingPoint;
+  x: number;
+  y: number;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelProps) {
@@ -40,6 +47,7 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     () => localStorage.getItem('chart_showVolume') !== 'false'
   );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<PendingPromptState | null>(null);
 
   // Keep showVolume accessible inside chart useEffect without retriggering it
   const showVolumeRef = useRef(showVolume);
@@ -65,6 +73,7 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
   const switchTool = useCallback((tool: ToolType) => {
     pendingPointsRef.current = [];
     setActiveTool(tool);
+    setPendingPrompt(null);
   }, []);
 
   // ─── Escape key handler ────────────────────────────────────────────
@@ -74,6 +83,7 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
       if (e.key === 'Escape') {
         pendingPointsRef.current = [];
         setActiveTool('cursor');
+        setPendingPrompt(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -321,27 +331,22 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
           }
 
           case 'text': {
-            // Prompt user for text input
-            try {
-              const input = window.prompt('Enter text label:');
-              if (input && input.trim().length > 0) {
-                mgr.addText(clickPoint, input);
-              }
-            } catch {
-              // prompt can throw in some environments
-            }
+            setPendingPrompt({
+              tool: 'text',
+              point: clickPoint,
+              x: param.point.x,
+              y: param.point.y,
+            });
             break;
           }
 
           case 'hLine': {
-            // Prompt for optional label
-            try {
-              const input = window.prompt('Enter label (optional):');
-              const label = input && input.trim().length > 0 ? input : undefined;
-              mgr.addHorizontalLine(clickPoint, label);
-            } catch {
-              // prompt can throw in some environments
-            }
+            setPendingPrompt({
+              tool: 'hLine',
+              point: clickPoint,
+              x: param.point.x,
+              y: param.point.y,
+            });
             break;
           }
 
@@ -537,6 +542,59 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
         {isLoadingMore && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-panel/90 border border-main text-muted text-xs px-3 py-1 rounded-full pointer-events-none select-none">
             Loading older candles…
+          </div>
+        )}
+
+        {/* Text Prompt Overlay */}
+        {pendingPrompt && (
+          <div 
+            key={`${pendingPrompt.x}-${pendingPrompt.y}`}
+            className="absolute z-50 bg-panel border border-main p-2 rounded shadow-lg flex gap-2 items-center"
+            style={{ 
+              left: pendingPrompt.x, 
+              top: pendingPrompt.y,
+              transform: 'translate(-50%, -100%)',
+              marginTop: '-10px'
+            }}
+          >
+            <input 
+              id="chart-prompt-input"
+              autoFocus
+              type="text"
+              placeholder={pendingPrompt.tool === 'text' ? "Enter text label..." : "Enter label (optional)..."}
+              className="bg-main text-sm text-main px-2 py-1 rounded outline-none border border-transparent focus:border-white/20 w-40"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const val = e.currentTarget.value;
+                  if (pendingPrompt.tool === 'text') {
+                    if (val.trim()) drawingMgrRef.current.addText(pendingPrompt.point, val);
+                  } else {
+                    drawingMgrRef.current.addHorizontalLine(pendingPrompt.point, val.trim() || undefined);
+                  }
+                  setPendingPrompt(null);
+                  setActiveTool('cursor');
+                } else if (e.key === 'Escape') {
+                  setPendingPrompt(null);
+                }
+              }}
+            />
+            <button 
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded transition-colors"
+              onClick={() => {
+                const input = document.getElementById('chart-prompt-input') as HTMLInputElement;
+                if (!input) return;
+                const val = input.value;
+                if (pendingPrompt.tool === 'text') {
+                  if (val.trim()) drawingMgrRef.current.addText(pendingPrompt.point, val);
+                } else {
+                  drawingMgrRef.current.addHorizontalLine(pendingPrompt.point, val.trim() || undefined);
+                }
+                setPendingPrompt(null);
+                setActiveTool('cursor');
+              }}
+            >
+              Save
+            </button>
           </div>
         )}
       </div>
