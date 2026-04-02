@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
 import { API_BASE_URL } from "../config";
 
-// We now accept a direct function to call when data arrives
-export function useTradeWebSocket(symbol: string, onNewData: (data: any) => void) {
-    // This keeps the function fresh without restarting the WebSocket
+export function useTradeWebSocket(
+    symbol: string,
+    timeframe: string,
+    onNewData: (data: any, isHistorical: boolean) => void
+) {
+    // Keep the callback ref fresh without restarting the WebSocket
     const callbackRef = useRef(onNewData);
     useEffect(() => { callbackRef.current = onNewData; });
 
@@ -11,24 +14,22 @@ export function useTradeWebSocket(symbol: string, onNewData: (data: any) => void
         const token = localStorage.getItem('access_token');
         if (!token) return;
 
+        const topic = `candles:${symbol}:${timeframe}`;
         const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-            console.log(`Chart WS Connected for ${symbol}`);
-            ws.send(JSON.stringify({ action: "subscribe", topic: `candles:${symbol}` }));
+            console.log(`Chart WS Connected for ${symbol} @ ${timeframe}`);
+            ws.send(JSON.stringify({ action: "subscribe", topic }));
         };
 
         ws.onmessage = (event) => {
             try {
                 const payload = JSON.parse(event.data);
-                console.log("Chart WS Data Received:", payload);
-                
                 if (payload.data) {
-                    // Send just the inner object (open, high, low, close, bucket_time) to the chart
-                    callbackRef.current(payload.data); 
+                    const isHistorical = payload.topic === `${topic}:historical`;
+                    callbackRef.current(payload.data, isHistorical);
                 }
-                
             } catch (err) {
                 console.error('Failed to parse chart WS message', err);
             }
@@ -37,8 +38,8 @@ export function useTradeWebSocket(symbol: string, onNewData: (data: any) => void
         return () => {
             if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
                 ws.close();
-                console.log(`Chart WS Closed for ${symbol}`);
+                console.log(`Chart WS Closed for ${symbol} @ ${timeframe}`);
             }
         };
-    }, [symbol]); 
+    }, [symbol, timeframe]);
 }

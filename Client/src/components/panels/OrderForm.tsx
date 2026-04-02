@@ -27,7 +27,7 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
    const baseAsset = symbol ? symbol.split('/')[0] : 'Asset';
 
    // 3. LISTEN TO THE LIVE TICKS (Just like the ChartPanel does!)
-   useTradeWebSocket(symbol, (liveData: any) => {
+   useTradeWebSocket(symbol, '1s', (liveData: any) => {
       if (liveData && liveData.close) {
          setLiveMarketPrice(liveData.close);
       }
