@@ -146,7 +146,7 @@ func (e *Engine) match(taker models.Order, side *OrderSide) int64 {
 			// If the taker and maker are the exact same user ID, block it!
 			// -----------------------------------------------------------
 			if maker.UserID != 0 && maker.UserID == taker.UserID {
-				log.Printf("🛡️ STP TRIGGERED: Prevented User %d from trading with itself on %s", taker.UserID, taker.Symbol)
+				// log.Printf("🛡️ STP TRIGGERED: Prevented User %d from trading with itself on %s", taker.UserID, taker.Symbol)
 
 				// Emit Event: Volume Removed due to STP cancellation
 				e.EventStream <- models.MarketEvent{
