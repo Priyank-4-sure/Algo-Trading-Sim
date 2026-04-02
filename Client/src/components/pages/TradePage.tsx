@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { ChartPanel, OrderBook, Balances, OrderForm } from '../panels';
-import { Maximize2, X, ChevronDown } from 'lucide-react';
+import { Maximize2, X } from 'lucide-react';
 import { DashboardContextType } from '../layouts/Layout';
 
 interface TradePageProps {
@@ -10,7 +10,7 @@ interface TradePageProps {
 
 export function TradePage({ darkMode }: TradePageProps) {
   // 1. Grab all our dynamic data from the Layout context
-  const { activeSymbol, setActiveSymbol, markets, positions } = useOutletContext<DashboardContextType>();
+  const { activeSymbol, markets, positions } = useOutletContext<DashboardContextType>();
 
   // 2. Find the currently active market so we can display its % change
   // Fallback to the first market just in case it's still loading
@@ -21,7 +21,7 @@ export function TradePage({ darkMode }: TradePageProps) {
   const currentMarketPrice = Number(activeIndexData?.price) || 0; 
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [timeframe, setTimeframe] = useState('1m');
+  const [timeframe, setTimeframe] = useState('1s');
 
   // Custom Resizability State
   const [leftWidth, setLeftWidth] = useState(280);
@@ -132,19 +132,8 @@ export function TradePage({ darkMode }: TradePageProps) {
           >
             <div className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${isFullscreen ? 'rounded-none border-none bg-panel' : 'glass-panel rounded-lg'}`}>
               <div className="px-3 py-2 border-b border-main font-semibold text-sm flex items-center justify-between">
-                <div className="flex items-center gap-2 relative group cursor-pointer">
-                  <select
-                    value={activeSymbol}
-                    onChange={(e) => setActiveSymbol(e.target.value)}
-                    className="appearance-none bg-transparent hover:bg-panel/50 outline-none pr-6 py-1 pl-2 rounded cursor-pointer font-bold"
-                  >
-                    {markets.map(market => (
-                      <option key={market.symbol} value={market.symbol} className="bg-background text-foreground">
-                        {market.displaySymbol}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-2 pointer-events-none text-muted" />
+                <div className="flex items-center gap-2">
+                  <span className="font-bold">{activeIndexData?.displaySymbol || activeSymbol}</span>
                   {activeIndexData && (
                     <span className={`text-xs font-medium ${activeIndexData.isPositive ? 'text-up' : 'text-down'}`}>
                       {activeIndexData.change}
@@ -158,7 +147,7 @@ export function TradePage({ darkMode }: TradePageProps) {
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`text-xs px-2 py-1 rounded transition-colors whitespace-nowrap ${tf === timeframe ? 'bg-panel border border-white/20 text-main' : 'hover:bg-panel text-muted hover:text-main'}`}
+                        className={`text-xs px-2 py-1 rounded transition-colors whitespace-nowrap ${tf === timeframe ? 'bg-black/50 border border-white/20 text-main' : 'hover:bg-panel text-muted hover:text-main'}`}
                       >
                         {tf}
                       </button>

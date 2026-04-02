@@ -3,12 +3,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Crosshair, Grid, BarChart2,
   TrendingUp, GitBranch,
-  ArrowUpCircle, ArrowDownCircle,
-  Trash2,
+  Trash2, Eraser, Type, Minus, BarChart3, RotateCcw,
 } from 'lucide-react';
 import { useTradeWebSocket } from '../../hooks/useTrade';
 import { DrawingManager, DrawingPoint } from './chart/drawingManager';
-import { OHLCOverlay } from './chart/OHLCOverlay';
+import { OHLCOverlay, OHLCOverlayHandle } from './chart/OHLCOverlay';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -16,8 +15,8 @@ type ToolType =
   | 'cursor'
   | 'trendLine'
   | 'channel'
-  | 'longPosition'
-  | 'shortPosition'
+  | 'text'
+  | 'hLine'
   | 'delete';
 
 interface ChartPanelProps {
@@ -36,13 +35,24 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
   const [activeTool, setActiveTool] = useState<ToolType>('cursor');
   const [chartType,  setChartType]  = useState<'candlestick' | 'line'>('candlestick');
-  const [showGrid,   setShowGrid]   = useState(true);
+  const [showGrid,      setShowGrid]      = useState(true);
+  const [showVolume,    setShowVolume]    = useState<boolean>(
+    () => localStorage.getItem('chart_showVolume') !== 'false'
+  );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Keep showVolume accessible inside chart useEffect without retriggering it
+  const showVolumeRef = useRef(showVolume);
 
   // Refs for event handler access (avoid stale closures)
   const activeToolRef    = useRef<ToolType>(activeTool);
   const pendingPointsRef = useRef<DrawingPoint[]>([]);
   const drawingMgrRef    = useRef<DrawingManager>(new DrawingManager());
+  const ohlcRef          = useRef<OHLCOverlayHandle>(null);
+
+  // Keep darkMode accessible inside chart useEffect without re-running it
+  const darkModeRef = useRef(darkMode);
+  useEffect(() => { darkModeRef.current = darkMode; }, [darkMode]);
 
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
@@ -53,12 +63,11 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
   // ─── Safe tool switch ──────────────────────────────────────────────
 
   const switchTool = useCallback((tool: ToolType) => {
-    // Clear any pending drawing points when switching tools
     pendingPointsRef.current = [];
     setActiveTool(tool);
   }, []);
 
-  // ─── Escape key handler (cancel pending drawing) ──────────────────
+  // ─── Escape key handler ────────────────────────────────────────────
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -69,6 +78,28 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // ─── Delete All handler ────────────────────────────────────────────
+
+  const handleDeleteAll = useCallback(() => {
+    try {
+      drawingMgrRef.current.deleteAll();
+    } catch {
+      // Safety catch
+    }
+  }, []);
+
+  // ─── Reset chart handler ───────────────────────────────────────────
+
+  const handleResetChart = useCallback(() => {
+    try {
+      if (chartRef.current) {
+        chartRef.current.timeScale().fitContent();
+      }
+    } catch {
+      // Safety catch
+    }
   }, []);
 
   // ─── Live data handler ────────────────────────────────────────────
@@ -105,7 +136,6 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
         return;
       }
 
-      // Live tick
       const t = Math.floor(new Date(liveData.bucket_time).getTime() / 1000);
 
       if (chartType === 'candlestick') {
@@ -132,13 +162,11 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Reset state
     allCandlesRef.current  = [];
     loadedCountRef.current = 0;
     isFetchingRef.current  = false;
     pendingPointsRef.current = [];
 
-    // Destroy existing drawings from previous chart instance
     drawingMgrRef.current.destroyAll();
 
     const chunkSize = timeframe === '5s' ? 120 : 600;
@@ -161,10 +189,10 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
       rightPriceScale: { borderColor: darkMode ? '#1E1E1E' : '#e0e0e0' },
       crosshair: { mode: CrosshairMode.Normal },
       autoSize: true,
+      watermark: { visible: false },
     });
 
     chartRef.current = chart;
-    drawingMgrRef.current.setChart(chart);
 
     // Main series
     let mainSeries: any;
@@ -181,6 +209,9 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     }
     seriesRef.current = mainSeries;
 
+    // Bind drawing manager to chart + main series
+    drawingMgrRef.current.setChart(chart, mainSeries);
+
     // Volume series
     const volSeries = chart.addHistogramSeries({
       color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '',
@@ -188,10 +219,14 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     volumeSeriesRef.current = volSeries;
     chart.priceScale('').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
+    // Apply persisted visibility immediately (before data loads)
+    volSeries.applyOptions({ visible: showVolumeRef.current });
+
     mainSeries.setData([]);
     volSeries.setData([]);
 
     // ─── Lazy-load on scroll ────────────────────────────────────────
+
     const loadMoreCandles = () => {
       if (isFetchingRef.current) return;
       const all    = allCandlesRef.current;
@@ -246,7 +281,6 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
     const handleChartClick = (param: any) => {
       try {
-        // Validate event data
         if (!param || !param.point || param.time == null) return;
 
         const price = mainSeries.coordinateToPrice(param.point.y);
@@ -264,7 +298,6 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
         switch (tool) {
           case 'cursor':
-            // Default — no drawing action
             break;
 
           case 'trendLine': {
@@ -287,22 +320,27 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
             break;
           }
 
-          case 'longPosition': {
-            pendingPointsRef.current.push(clickPoint);
-            if (pendingPointsRef.current.length >= 2) {
-              const [entry, exit] = pendingPointsRef.current;
-              mgr.addPosition(entry, exit, 'longPosition');
-              pendingPointsRef.current = [];
+          case 'text': {
+            // Prompt user for text input
+            try {
+              const input = window.prompt('Enter text label:');
+              if (input && input.trim().length > 0) {
+                mgr.addText(clickPoint, input);
+              }
+            } catch {
+              // prompt can throw in some environments
             }
             break;
           }
 
-          case 'shortPosition': {
-            pendingPointsRef.current.push(clickPoint);
-            if (pendingPointsRef.current.length >= 2) {
-              const [entry, exit] = pendingPointsRef.current;
-              mgr.addPosition(entry, exit, 'shortPosition');
-              pendingPointsRef.current = [];
+          case 'hLine': {
+            // Prompt for optional label
+            try {
+              const input = window.prompt('Enter label (optional):');
+              const label = input && input.trim().length > 0 ? input : undefined;
+              mgr.addHorizontalLine(clickPoint, label);
+            } catch {
+              // prompt can throw in some environments
             }
             break;
           }
@@ -321,6 +359,47 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     };
     chart.subscribeClick(handleChartClick);
 
+    // ─── OHLC on crosshair move ──────────────────────────────────────
+    //
+    // We subscribe here (not in a child component) so that `mainSeries`
+    // is the exact same object the chart holds as a Map key.
+
+    const handleCrosshairMove = (param: any) => {
+      try {
+        const overlay = ohlcRef.current;
+        if (!overlay) return;
+
+        if (!param || param.time == null) {
+          // Cursor has left the chart
+          overlay.clear();
+          return;
+        }
+
+        // Try seriesData (v4.1+) then seriesPrices (older v4)
+        let data: any = null;
+        if (param.seriesData && typeof param.seriesData.get === 'function') {
+          data = param.seriesData.get(mainSeries);
+        }
+        if (!data && param.seriesPrices && typeof param.seriesPrices.get === 'function') {
+          data = param.seriesPrices.get(mainSeries);
+        }
+
+        if (
+          data &&
+          typeof data.open === 'number' && isFinite(data.open) &&
+          typeof data.high === 'number' && isFinite(data.high) &&
+          typeof data.low  === 'number' && isFinite(data.low)  &&
+          typeof data.close === 'number' && isFinite(data.close)
+        ) {
+          overlay.update(data.open, data.high, data.low, data.close, darkModeRef.current);
+        }
+        // If no data for this tick, leave last display as-is
+      } catch {
+        // Silently ignore
+      }
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
     // ─── Resize ─────────────────────────────────────────────────────
 
     const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth });
@@ -331,12 +410,27 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
     return () => {
       window.removeEventListener('resize', handleResize);
       try { chart.unsubscribeClick(handleChartClick); } catch { /* noop */ }
+      try { chart.unsubscribeCrosshairMove(handleCrosshairMove); } catch { /* noop */ }
       try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange); } catch { /* noop */ }
       drawingMgrRef.current.destroyAll();
       try { chart.remove(); } catch { /* noop */ }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [darkMode, chartType, timeframe, symbol]);
+
+  // ─── Volume visibility (no chart rebuild needed) ─────────────────
+
+  useEffect(() => {
+    showVolumeRef.current = showVolume;
+    localStorage.setItem('chart_showVolume', String(showVolume));
+    if (volumeSeriesRef.current) {
+      try {
+        volumeSeriesRef.current.applyOptions({ visible: showVolume });
+      } catch {
+        // series might not exist yet
+      }
+    }
+  }, [showVolume]);
 
   // ─── Grid toggle without chart rebuild ────────────────────────────
 
@@ -355,26 +449,19 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
   const cursorStyle = activeTool === 'cursor' ? 'default' : 'crosshair';
 
-  const pendingClickCount =
-    activeTool === 'trendLine' || activeTool === 'longPosition' || activeTool === 'shortPosition'
-      ? 2
-      : activeTool === 'channel'
-        ? 3
-        : 0;
-
   // ─── Toolbar button helper ────────────────────────────────────────
 
   const ToolBtn = ({ tool, title, icon: Icon }: { tool: ToolType; title: string; icon: any }) => (
     <button
       onClick={() => switchTool(tool)}
-      className={`p-2 rounded-md transition-all border ${
+      className={`p-1.5 rounded-md transition-all border ${
         activeTool === tool
           ? 'bg-main text-main border-white/20'
           : 'text-muted hover:text-main hover:bg-main/50 border-transparent'
       }`}
       title={title}
     >
-      <Icon size={18} />
+      <Icon size={20} />
     </button>
   );
 
@@ -382,59 +469,68 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
   return (
     <div className="flex w-full h-full bg-panel font-sans">
-      {/* Left Toolbar */}
-      <div className="w-12 shrink-0 border-r border-main flex flex-col items-center py-2 gap-1.5 bg-panel transition-colors">
-        <ToolBtn tool="cursor"        title="Cursor"           icon={Crosshair} />
-
-        <div className="w-6 border-t border-main/50 my-0.5" />
-
+      {/* Left Toolbar — responsive and compact with hidden scrollbar */}
+      <div className="shrink-0 border-r border-main flex flex-col items-center py-1 px-1 gap-0.5 bg-panel transition-colors overflow-y-auto max-h-full no-scrollbar">
+        <ToolBtn tool="cursor"        title="Cursor"                     icon={Crosshair} />
         <ToolBtn tool="trendLine"     title="Trend Line (2 clicks)"     icon={TrendingUp} />
         <ToolBtn tool="channel"       title="Parallel Channel (3 clicks)" icon={GitBranch} />
-
-        <div className="w-6 border-t border-main/50 my-0.5" />
-
-        <ToolBtn tool="longPosition"  title="Long Position (2 clicks)"  icon={ArrowUpCircle} />
-        <ToolBtn tool="shortPosition" title="Short Position (2 clicks)" icon={ArrowDownCircle} />
-
-        <div className="w-6 border-t border-main/50 my-0.5" />
-
+        <ToolBtn tool="hLine"        title="Horizontal Level (click to place)" icon={Minus} />
+        <ToolBtn tool="text"          title="Text Label (click to place)" icon={Type} />
         <ToolBtn tool="delete"        title="Delete Drawing (click nearest)" icon={Trash2} />
 
-        <div className="w-6 border-t border-main/50 my-0.5" />
+        {/* Delete All button — always visible, not a "tool" */}
+        <button
+          onClick={handleDeleteAll}
+          className="p-1.5 rounded-md transition-all border text-muted hover:text-red-400 hover:bg-red-500/10 border-transparent"
+          title="Delete All Drawings"
+        >
+          <Eraser size={20} />
+        </button>
+
+        <button
+          onClick={() => setChartType(t => t === 'candlestick' ? 'line' : 'candlestick')}
+          className={`p-1.5 rounded-md transition-all border ${chartType === 'line' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
+          title="Toggle Chart Type"
+        >
+          <BarChart2 size={20} />
+        </button>
+
+        <button
+          onClick={() => setShowVolume(v => !v)}
+          className={`p-1.5 rounded-md transition-all border ${
+            showVolume
+              ? 'bg-main text-main border-white/20'
+              : 'text-muted hover:text-main hover:bg-main/50 border-transparent'
+          }`}
+          title={showVolume ? 'Hide Volume' : 'Show Volume'}
+        >
+          <BarChart3 size={20} />
+        </button>
 
         <button
           onClick={() => setShowGrid(g => !g)}
-          className={`p-2 rounded-md transition-all border ${showGrid ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
+          className={`p-1.5 rounded-md transition-all border ${showGrid ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
           title="Toggle Grid"
         >
-          <Grid size={18} />
+          <Grid size={20} />
         </button>
 
-        <div className="mt-auto pb-2">
-          <button
-            onClick={() => setChartType(t => t === 'candlestick' ? 'line' : 'candlestick')}
-            className={`p-2 rounded-md transition-all border ${chartType === 'line' ? 'bg-main text-main border-white/20' : 'text-muted hover:text-main hover:bg-main/50 border-transparent'}`}
-            title="Toggle Chart Type"
-          >
-            <BarChart2 size={18} />
-          </button>
-        </div>
+        <button
+          onClick={handleResetChart}
+          className="p-1.5 rounded-md transition-all border text-muted hover:text-main hover:bg-main/50 border-transparent"
+          title="Reset Chart"
+        >
+          <RotateCcw size={20} />
+        </button>
       </div>
 
       {/* Chart area */}
       <div className="relative flex-1 min-w-0 h-full">
         <div ref={chartContainerRef} style={{ cursor: cursorStyle }} className="w-full h-full" />
 
-        {/* OHLC overlay */}
+        {/* OHLC overlay — always mounted; hidden when not hovering */}
         {chartType === 'candlestick' && (
-          <OHLCOverlay chartRef={chartRef} seriesRef={seriesRef} darkMode={darkMode} />
-        )}
-
-        {/* Pending click indicator */}
-        {pendingClickCount > 0 && pendingPointsRef.current.length > 0 && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-panel/90 border border-main text-muted text-xs px-3 py-1 rounded-full pointer-events-none select-none">
-            Click {pendingPointsRef.current.length}/{pendingClickCount} — press Esc to cancel
-          </div>
+          <OHLCOverlay ref={ohlcRef} />
         )}
 
         {/* Loading indicator */}
