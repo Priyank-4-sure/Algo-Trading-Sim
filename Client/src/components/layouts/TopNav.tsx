@@ -1,6 +1,6 @@
 import { 
   Moon, Sun, Search, Bell, ChevronDown, LogOut, User, ChevronRight,
-  BarChart2, PieChart, Star, History, LineChart, Activity // Added new icons for page titles
+  BarChart2, PieChart, Star, History, LineChart, Activity, Menu
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom'; // <-- NEW: Import useLocation
@@ -9,6 +9,7 @@ import { MarketPair } from '../../data/mockData';
 interface TopNavProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
+  toggleMobileNav: () => void;
   onLogout: () => void;
   onProfileClick: () => void;
   activeSymbol: string; 
@@ -19,6 +20,7 @@ interface TopNavProps {
 export function TopNav({ 
   darkMode, 
   toggleDarkMode, 
+  toggleMobileNav,
   onLogout, 
   onProfileClick, 
   activeSymbol, 
@@ -72,29 +74,37 @@ export function TopNav({
   const pageContext = getPageContext();
 
   return (
-    <header className="h-12 border-b border-main bg-panel flex items-center justify-between px-4 shrink-0 shadow-sm z-50 transition-colors font-sans">
-      <div className="flex items-center gap-4">
-        {/* NextBull Logo - Always visible */}
-        <div className="flex items-center gap-2 pr-4 border-r border-main">
-          <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-8 w-auto" />
-          <span className="font-semibold text-xl tracking-wide text-white">NEXTBULL</span>
+    <header className="h-12 md:h-14 border-b border-main bg-panel flex items-center justify-between px-2 md:px-4 shrink-0 shadow-sm z-50 transition-colors font-sans w-full">
+      <div className="flex items-center gap-1 md:gap-4 flex-1 min-w-0">
+        
+        {/* Mobile Menu & Logo */}
+        <div className="flex items-center gap-1.5 md:gap-2 pr-2 md:pr-4 border-r border-main shrink-0">
+          <button 
+            onClick={toggleMobileNav}
+            className="md:hidden p-1 text-muted hover:text-main transition-colors"
+            title="Open Menu"
+          >
+            <Menu size={18} />
+          </button>
+          <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
+          <span className="font-semibold text-base md:text-xl tracking-wide text-white hidden sm:block">NEXTBULL</span>
         </div>
 
         {/* --- CONDITIONAL RENDERING --- */}
         {isTradePage ? (
-          <>
+          <div className="flex items-center flex-1 min-w-0 gap-1 md:gap-2">
             {/* Premium Coin Picker (Trade Page Only) */}
-            <div className="relative" ref={pickerRef}>
+            <div className="relative shrink-0" ref={pickerRef}>
               <button
                 onClick={() => setIsPickerOpen(!isPickerOpen)}
-                className={`flex items-center gap-3 w-56 px-3 py-1.5 rounded-md border transition-all duration-200 group
+                className={`flex items-center justify-between gap-1 md:gap-3 w-24 sm:w-40 md:w-56 px-2 md:px-3 py-1 md:py-1.5 rounded-md border transition-all duration-200 group
                   ${isPickerOpen
                     ? 'border-white bg-main'
                     : 'border-main bg-main/50 hover:border-white/50'}`}
               >
-                <Search size={14} className={`${isPickerOpen ? 'text-main' : 'text-muted group-hover:text-main'}`} />
-                <span className="flex-1 text-left text-sm font-bold text-main">{currentPair?.displaySymbol || activeSymbol}</span>
-                <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
+                <Search size={14} className={`shrink-0 hidden sm:block ${isPickerOpen ? 'text-main' : 'text-muted group-hover:text-main'}`} />
+                <span className="flex-1 text-left text-[11px] md:text-sm font-bold text-main truncate">{currentPair?.displaySymbol || activeSymbol}</span>
+                <ChevronDown size={14} className={`text-muted shrink-0 transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isPickerOpen && (
@@ -153,14 +163,14 @@ export function TopNav({
             </div>
 
             {/* Dynamic header stats (Trade Page Only) */}
-            <div className="flex items-center gap-8 border-l border-main pl-8 ml-2">
+            <div className="flex items-center gap-2 md:gap-8 border-l border-main pl-2 md:pl-8 min-w-0">
               {currentPair && (
                 <>
-                  <div className="flex items-baseline gap-2">
-                    <span className={`font-bold text-base tracking-tight font-mono ${currentPair.isPositive ? 'text-up' : 'text-down'}`}>
+                  <div className="flex items-baseline gap-1 md:gap-2 truncate">
+                    <span className={`font-bold text-[13px] md:text-base tracking-tight font-mono ${currentPair.isPositive ? 'text-up' : 'text-down'}`}>
                       {currentPair.price}
                     </span>
-                    <span className={`text-xs font-semibold ${currentPair.isPositive ? 'text-up' : 'text-down'}`}>
+                    <span className={`text-[10px] md:text-xs font-semibold ${currentPair.isPositive ? 'text-up' : 'text-down'} hidden sm:inline`}>
                       {currentPair.change}
                     </span>
                   </div>
@@ -175,38 +185,38 @@ export function TopNav({
                 </>
               )}
             </div>
-          </>
+          </div>
         ) : (
           /* --- ALTERNATIVE UI FOR NON-TRADE PAGES --- */
-          <div className="flex items-center gap-2 px-2 text-muted animate-in fade-in slide-in-from-left-2 duration-300">
-            {pageContext.icon}
-            <span className="font-bold text-main tracking-tight">{pageContext.title}</span>
+          <div className="flex items-center gap-2 px-2 text-muted animate-in fade-in slide-in-from-left-2 duration-300 truncate">
+            <span className="shrink-0">{pageContext.icon}</span>
+            <span className="font-bold text-sm md:text-base text-main tracking-tight truncate">{pageContext.title}</span>
           </div>
         )}
       </div>
 
       {/* Right Side Settings (Always visible) */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1 md:gap-3 shrink-0 ml-1 md:ml-3">
         <button
           onClick={toggleDarkMode}
-          className="p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main"
+          className="p-1.5 md:p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main"
           title="Toggle Theme"
         >
-          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+          {darkMode ? <Sun size={16} className="md:w-[18px] md:h-[18px]" /> : <Moon size={16} className="md:w-[18px] md:h-[18px]" />}
         </button>
         
         {/* Account Dropdown Container */}
-        <div className="relative ml-2" ref={profileRef}>
+        <div className="relative ml-1 md:ml-2" ref={profileRef}>
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-sm transition-colors ${
+            className={`w-7 h-7 md:w-8 md:h-8 rounded-full border flex items-center justify-center shadow-sm transition-colors ${
               isProfileOpen 
                 ? 'bg-main border-white text-panel' 
                 : 'bg-panel border-main text-main hover:border-white/50 shadow-white/5'
             }`}
             title="View Profile"
           >
-            <User size={18} />
+            <User size={14} className="md:w-[18px] md:h-[18px]" />
           </button>
 
           {isProfileOpen && (

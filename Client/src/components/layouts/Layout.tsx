@@ -38,6 +38,7 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   const [markets, setMarkets] = useState<MarketPair[]>([]);
   const [positions, setPositions] = useState<Position[]>(MOCK_POSITIONS);
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Fetch assets and watchlist from the backend API
   useEffect(() => {
@@ -165,12 +166,13 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
 
   return (
     <div className="min-h-screen flex transition-colors duration-300 bg-main text-main font-sans">
-      <SideNav onLogout={onLogout} />
+      <SideNav onLogout={onLogout} isMobileOpen={isMobileNavOpen} closeMobileNav={() => setIsMobileNavOpen(false)} />
 
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
         <TopNav
           darkMode={darkMode}
           toggleDarkMode={toggleDarkMode}
+          toggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)}
           onLogout={onLogout}
           onProfileClick={() => navigate("/app/portfolio")}
           activeSymbol={activeSymbol}
