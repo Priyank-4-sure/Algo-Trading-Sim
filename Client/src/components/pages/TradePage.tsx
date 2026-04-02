@@ -10,7 +10,7 @@ interface TradePageProps {
 
 export function TradePage({ darkMode }: TradePageProps) {
   // 1. Grab all our dynamic data from the Layout context
-  const { activeSymbol, setActiveSymbol, markets, holdings } = useOutletContext<DashboardContextType>();
+  const { activeSymbol, markets, holdings } = useOutletContext<DashboardContextType>();
 
   // 2. Find the currently active market so we can display its % change
   // Fallback to the first market just in case it's still loading

@@ -2,7 +2,7 @@ import { Sun, Moon } from 'lucide-react';
 
 interface GuestTopNavProps {
   darkMode: boolean;
-  toggleDarkMode: () => void; // <-- Added new prop for the theme toggle
+  toggleDarkMode: () => void;
   onLogin: () => void;
   onSignUp: () => void;
   onGoHome: () => void;
@@ -10,50 +10,45 @@ interface GuestTopNavProps {
 
 export function GuestTopNav({ darkMode, toggleDarkMode, onLogin, onSignUp, onGoHome }: GuestTopNavProps) {
   return (
-    <header className={`h-14 border-b flex items-center justify-between px-6 sticky top-0 z-50 transition-colors duration-300 backdrop-blur-md ${
-      darkMode ? 'border-slate-800 bg-slate-900/80' : 'border-slate-200 bg-white/80 shadow-sm'
-    }`}>
-      
-      {/* Clickable Logo (Redirects Home) */}
-      <button onClick={onGoHome} className="flex items-center gap-2 hover:scale-105 transition-transform outline-none">
-        <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-8 w-auto" />
-        <span className="font-semibold text-xl tracking-wide text-white">
+    <header className="h-12 md:h-14 border-b border-main bg-panel flex items-center justify-between px-4 md:px-6 sticky top-0 z-50 shrink-0 shadow-sm transition-colors font-sans">
+
+      {/* Logo */}
+      <button
+        onClick={onGoHome}
+        className="flex items-center gap-2 hover:opacity-80 transition-opacity outline-none shrink-0"
+      >
+        <img src="assets/images/logo.webp" alt="NextBull Logo" className="h-6 md:h-8 w-auto" />
+        <span className="font-semibold text-lg md:text-xl tracking-wide text-main hidden sm:block">
           NEXTBULL
         </span>
       </button>
 
-      {/* Auth & Theme Actions */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        
-        {/* Theme Toggle Button */}
+      {/* Auth & Theme */}
+      <div className="flex items-center gap-1 md:gap-2">
         <button
           onClick={toggleDarkMode}
-          className={`p-2 rounded-full transition-colors ${
-            darkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-          }`}
+          className="p-1.5 md:p-2 rounded-full hover:bg-main transition-colors text-muted hover:text-main"
           title="Toggle Theme"
         >
-          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+          {darkMode
+            ? <Sun size={16} className="md:w-[18px] md:h-[18px]" />
+            : <Moon size={16} className="md:w-[18px] md:h-[18px]" />
+          }
         </button>
 
-        {/* Log In Button */}
-        <button 
+        <button
           onClick={onLogin}
-          className={`px-3 sm:px-4 py-2 text-sm font-bold rounded-lg transition-all ${
-            darkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-muted hover:text-main hover:bg-main"
         >
           Log In
         </button>
-        
-        {/* Sign Up Button */}
-        <button 
+
+        <button
           onClick={onSignUp}
-          className="px-4 sm:px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+          className="px-3 md:px-5 py-1.5 md:py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs md:text-sm font-bold rounded-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95"
         >
           Sign Up
         </button>
-        
       </div>
     </header>
   );
