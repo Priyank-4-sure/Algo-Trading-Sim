@@ -37,7 +37,9 @@ export function TopNav({
   const isTradePage = location.pathname.includes('/trade');
 
   const currentPair = markets.find(p => p.symbol === activeSymbol) || markets[0];
-
+  const stored = localStorage.getItem('user');
+  const data = stored ? JSON.parse(stored) : null;
+  const name = data?.fullName;
   const filteredPairs = markets.filter(p =>
     p.displaySymbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -210,8 +212,8 @@ export function TopNav({
           {isProfileOpen && (
             <div className="absolute right-0 top-full mt-3 w-56 bg-main border border-main rounded-xl shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="p-3 border-b border-main bg-panel/30 rounded-t-xl mb-1">
-                 <p className="text-[10px] font-bold text-muted uppercase tracking-tighter leading-none mb-1">Authenticated as</p>
-                 <p className="text-sm font-bold text-main truncate">User Profile</p>
+                 <p className="text-[10px] font-bold text-muted uppercase tracking-tighter leading-none mb-1">Username</p>
+                 <p className="text-sm font-bold text-main truncate">{name}</p>
               </div>
               <div className="p-1.5 flex flex-col gap-0.5">
                 <button 
@@ -221,7 +223,7 @@ export function TopNav({
                   }} 
                   className="w-full flex items-center justify-between p-2.5 rounded-lg transition-colors text-xs font-medium text-muted hover:text-main hover:bg-panel"
                 >
-                  <div className="flex items-center gap-2"><User size={14} /> See full profile</div>
+                  <div className="flex items-center gap-2"><User size={14} /> See full portfolio</div>
                   <ChevronRight size={14} className="opacity-50" />
                 </button>
                 <button 
