@@ -63,13 +63,10 @@ export function LoginPage({ darkMode, toggleDarkMode }: LoginPageProps) {
   };
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-500 ${
-        darkMode ? 'bg-black text-white' : 'bg-slate-50 text-slate-900'
-      }`}
-    >
-      {/* ─── NAV ─── */}
-      <GuestTopNav
+    <div className="min-h-screen w-full flex flex-col font-sans transition-colors duration-500 bg-main text-main">
+      
+      {/* ─── SHARED TOP NAVIGATION ─── */}
+      <GuestTopNav 
         darkMode={darkMode}
         toggleDarkMode={toggleDarkMode}
         onLogin={() => {}}
