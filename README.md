@@ -6,7 +6,7 @@
 
 1. Clone the repository:
    ```bash
-   git clone <repository_url>
+   git clone https://github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator.git
    ```
 
 ### Working on a Feature (Git Workflow)
@@ -227,23 +227,59 @@ The backend is currently powered by an **in-memory, concurrent matching engine b
 
 ## API Reference
 
-The primary entry points for interacting with the simulation are listed below:
+Base path: `/v1`
 
-| Endpoint        | Method | Description |
-|----------------|--------|-------------|
-| `/health`      | GET    | Health check to verify the server is running |
-| `/order`       | POST   | Submit a new Limit or Market order |
-| `/ws`          | WS     | WebSocket endpoint for real-time market data |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/register` | Create a new user account and issue token pair |
+| POST | `/auth/login` | Authenticate and issue token pair |
+| POST | `/auth/refresh` | Rotate access token using refresh token |
+| POST | `/auth/logout` | Revoke session |
+| GET | `/ws` | Upgrade to WebSocket connection |
+| GET | `/assets` | List all tradeable assets |
+| GET | `/marketdata/{symbol}` | Latest price, volume, and change metrics |
+| GET | `/candles/{symbol}/{interval}` | OHLCV candle history |
+| POST | `/orders/` | Place a new limit or market order |
+| DELETE | `/orders/{id}` | Cancel an open order |
+| GET | `/orders/{id}` | Query single order status |
+| GET | `/orders/active` | List all active orders for the user |
+| GET | `/orders/history` | Paginated order history |
+| GET | `/trades/history` | Paginated executed trade history |
+| GET | `/portfolio/history` | Equity curve and P&L history |
+| POST | `/portfolio/reset` | Reset paper-trading portfolio to initial state |
+| GET | `/watchlist/` | Retrieve user watchlist |
+| POST | `/watchlist/{symbol}` | Add symbol to watchlist |
+| DELETE | `/watchlist/{symbol}` | Remove symbol from watchlist |
 
+Note: all `/orders`, `/trades`, `/portfolio`, and `/watchlist` endpoints require JWT authentication.
 ---
+# Containerization & One Click Start
 
-### Example: `POST /order` Payload
+## Step 1: create a .env file in root
+- create a .env in root folder and add the following variables
 
-```json
-{
-  "symbol": "TECH",
-  "side": "buy",
-  "type": "limit",
-  "price": 150.50,
-  "quantity": 100
-}
+```
+PRIMARY_DB_PASSWORD=local_secret_db
+CANDLESTICK_DB_PASSWORD=local_secret_ts
+REDIS_PASSWORD=local_secret_redis
+SERVER_JWT_SECRET=local_super_secret_jwt_key
+SERVER_JWT_REFRESH_SECRET=local_super_secret_refresh_key
+```
+
+## Step 2: Run the Container
+- Run the Container with the following command below to start the whole application.
+- Also Make Sure to compose down other conflicting containers
+
+```
+docker compose up -d --build
+```
+
+## Step 3: Check the Frontend
+- You can check the frontend on url below
+```
+http://localhost:80
+```
+or
+```
+http://localhost
+```

@@ -201,39 +201,7 @@ export function HistoryPage() {
   return (
     <div className="flex flex-col w-full h-full gap-0 overflow-hidden select-none font-sans">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 shrink-0 pb-[2px]">
-        <div className="pr-0.5">
-          <div className="glass-panel rounded-lg p-3 h-full">
-            <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
-              <ArrowUpRight size={12} /> Total P&L
-            </div>
-            <div
-              className={`text-xl font-bold font-mono ${totalPnL >= 0 ? "text-up" : "text-down"}`}
-            >
-              {totalPnL >= 0 ? "+" : ""}₹{totalPnL.toFixed(2)}
-            </div>
-          </div>
-        </div>
-        <div className="px-0.5">
-          <div className="glass-panel rounded-lg p-3 h-full">
-            <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
-              <Filter size={12} /> Winning Trades
-            </div>
-            <div className="text-xl font-bold text-up font-mono">{wins}</div>
-          </div>
-        </div>
-        <div className="pl-0.5">
-          <div className="glass-panel rounded-lg p-3 h-full">
-            <div className="text-[10px] text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
-              <ArrowDownRight size={12} /> Losing Trades
-            </div>
-            <div className="text-xl font-bold text-down font-mono">
-              {losses}
-            </div>
-          </div>
-        </div>
-      </div>
-
+    
       {/* Table */}
       <div className="flex-1 pt-1">
         <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full">
@@ -303,7 +271,6 @@ export function HistoryPage() {
                 <tr className="text-muted border-b border-subtle text-[10px] uppercase tracking-wider">
                   <th className="pb-2 pt-2 px-3 font-medium">Date</th>
                   <th className="pb-2 pt-2 px-2 font-medium">Symbol</th>
-                  <th className="pb-2 pt-2 px-2 font-medium">Side</th>
                   <th className="pb-2 pt-2 px-2 font-medium text-right">
                     Price
                   </th>
@@ -332,18 +299,6 @@ export function HistoryPage() {
                     </td>
                     <td className="py-2 px-2 font-bold text-main text-sm">
                       {trade.symbol}
-                    </td>
-                    <td className="py-2 px-2">
-                      <div
-                        className={`flex items-center gap-1 font-bold px-1.5 py-0.5 rounded w-fit text-[10px] ${trade.side === "Buy" ? "text-up bg-up/10" : "text-down bg-down/10"}`}
-                      >
-                        {trade.side === "Buy" ? (
-                          <ArrowUpRight size={10} />
-                        ) : (
-                          <ArrowDownRight size={10} />
-                        )}
-                        {trade.side}
-                      </div>
                     </td>
                     <td className="py-2 px-2 font-mono text-right text-main font-semibold text-sm">
                       ₹

@@ -128,7 +128,7 @@ export function PortfolioPage() {
             <div className="px-3 py-2 border-b border-main">
               <span className="font-semibold text-sm">Recent Activity</span>
             </div>
-            <div className="p-2 space-y-1 overflow-y-auto no-scrollbar flex-1">
+            {/* <div className="p-2 space-y-1 overflow-y-auto no-scrollbar flex-1">
               {[
                 { text: "Bought 0.452 BTC", time: "2h ago", color: "text-up" },
                 { text: "Sold 15.0 SOL", time: "5h ago", color: "text-down" },
@@ -151,7 +151,7 @@ export function PortfolioPage() {
                   </span>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
