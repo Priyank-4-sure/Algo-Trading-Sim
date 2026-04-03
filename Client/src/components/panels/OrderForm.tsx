@@ -22,45 +22,27 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
   // NEW: Function to fetch active orders (GET request matching your Go handler)
   const fetchPendingOrders = async () => {
     const token = localStorage.getItem("access_token");
-    // DEBUG: Check if token exists when attempting to fetch
-    console.log("DEBUG [fetchPendingOrders]: Token exists?", !!token);
 
     if (!token) return;
 
     setIsFetchingOrders(true);
     try {
-      // DEBUG: Log the exact URL being called
-      console.log(
-        `DEBUG [fetchPendingOrders]: Fetching from ${API_BASE_URL}/orders/active`,
-      );
 
       const response = await fetch(`${API_BASE_URL}/orders/active`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // DEBUG: Log the raw HTTP response status
-      console.log("DEBUG [fetchPendingOrders]: HTTP Status:", response.status);
-
       const result = await response.json();
-
-      // DEBUG: Log the parsed JSON payload returned from the Go backend
-      console.log("DEBUG [fetchPendingOrders]: Parsed JSON response:", result);
 
       if (response.ok) {
         // Accessing data.orders based on your Go GeneralSuccess response structure
         const fetchedOrders = result.data?.orders || [];
-        // DEBUG: Log what is actually being set into state
-        console.log(
-          "DEBUG [fetchPendingOrders]: Setting pending orders state to:",
-          fetchedOrders,
-        );
         setPendingOrders(fetchedOrders);
       }
     } catch (err) {
-      // DEBUG: Catch and log any network or parsing errors
       console.error(
-        "DEBUG [fetchPendingOrders]: Failed to fetch orders. Error:",
+        "[fetchPendingOrders]: Failed to fetch orders. Error:",
         err,
       );
     } finally {
@@ -82,7 +64,7 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
     }
 
     try {
-      console.log(`DEBUG [handleCancelOrder]: Cancelling order ${orderId}`);
+      console.log(`[handleCancelOrder]: Cancelling order ${orderId}`);
 
       // Assuming your Go backend expects a DELETE request to /orders/{id}
       // Adjust the endpoint if your backend uses a different route (e.g., POST /orders/cancel)
@@ -104,21 +86,19 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
       }
 
       console.log(
-        `DEBUG [handleCancelOrder]: Order ${orderId} cancelled successfully.`,
+        `[handleCancelOrder]: Order ${orderId} cancelled successfully.`,
       );
 
       // Refresh the pending orders list to reflect the cancellation
       fetchPendingOrders();
     } catch (err: any) {
-      console.error("DEBUG [handleCancelOrder]: Error:", err);
+      console.error(" [handleCancelOrder]: Error:", err);
       alert(`Error cancelling order: ${err.message}`);
     }
   };
 
   // Fetch when tab changes to 'pending'
   useEffect(() => {
-    // DEBUG: Log whenever the tab changes to trace user interaction
-    console.log("DEBUG [useEffect - Tab]: Tab state changed to:", tab);
     if (tab === "pending") {
       fetchPendingOrders();
     }
@@ -240,9 +220,6 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
     }
   };
 
-  console.log(
-    `DEBUG [Render]: Component rendering. Tab: ${tab}, isFetching: ${isFetchingOrders}, pendingOrders.length: ${pendingOrders.length}`,
-  );
 
   return (
     <div className="flex bg-panel flex-col h-full text-sm w-full font-sans">
