@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+	"context"
 
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/simulation/gbm"
@@ -30,13 +31,23 @@ func NewMarketMaker(manager *gbm.MarketManager, orderStream chan<- models.Order)
 	}
 }
 
-func (mm *MarketMaker) Start(symbols []string, tickRate time.Duration) {
+// Start tracks specific symbols and updates their order books continuously
+func (mm *MarketMaker) Start(ctx context.Context, symbols []string, tickRate time.Duration) {
 	ticker := time.NewTicker(tickRate)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		for _, symbol := range symbols {
-			mm.updateOrderBook(symbol)
+	for {
+		select {
+		case <-ctx.Done():
+			// Graceful shutdown triggered: break the infinite loop and exit the Goroutine
+			// You can optionally add a log.Println("Market Maker shutting down...") here
+			return
+            
+		case <-ticker.C:
+			// Normal tick operation: update the order book for all symbols
+			for _, symbol := range symbols {
+				mm.updateOrderBook(symbol)
+			}
 		}
 	}
 }

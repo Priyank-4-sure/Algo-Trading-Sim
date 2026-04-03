@@ -1,74 +1,92 @@
 [
   {
+    "symbol": "RELIANCE",
+    "class": "LARGE_CAP_BLUECHIP",
+    "start_price": 2950.00,
+    "isActive": true
+  },
+  {
     "symbol": "HDFCBANK",
-    "class": "STABLE_BANK",
-    "start_price": 1450.00,
+    "class": "FINANCIAL_PRIVATE",
+    "start_price": 1530.00,
     "isActive": true
   },
   {
-    "symbol": "JPM",
-    "class": "STABLE_BANK",
-    "start_price": 195.50,
+    "symbol": "ICICIBANK",
+    "class": "FINANCIAL_PRIVATE",
+    "start_price": 1080.00,
     "isActive": true
   },
   {
-    "symbol": "NVDA",
-    "class": "TECH_GROWTH",
-    "start_price": 900.25,
+    "symbol": "TCS",
+    "class": "IT_TECH_SERVICES",
+    "start_price": 3980.00,
     "isActive": true
   },
   {
-    "symbol": "SPY",
-    "class": "INDEX_FUND",
-    "start_price": 515.00,
+    "symbol": "INFY",
+    "class": "IT_TECH_SERVICES",
+    "start_price": 1490.00,
     "isActive": true
   },
   {
-    "symbol": "USDJPY",
-    "class": "FOREX_MAJOR",
-    "start_price": 151.50,
+    "symbol": "ITC",
+    "class": "FMCG_DEFENSIVE",
+    "start_price": 430.00,
     "isActive": true
   },
   {
-    "symbol": "XAUUSD",
-    "class": "COMMODITY_METAL",
-    "start_price": 2350.00,
+    "symbol": "HINDUNILVR",
+    "class": "FMCG_DEFENSIVE",
+    "start_price": 2250.00,
     "isActive": true
   },
   {
-    "symbol": "CRUDEOIL",
-    "class": "COMMODITY_ENERGY",
-    "start_price": 82.50,
+    "symbol": "SBIN",
+    "class": "PSU_EQUITY",
+    "start_price": 760.00,
     "isActive": true
   },
   {
-    "symbol": "TLT",
-    "class": "BOND_YIELD",
-    "start_price": 90.50,
+    "symbol": "COALINDIA",
+    "class": "PSU_EQUITY",
+    "start_price": 440.00,
+    "isActive": true
+  },
+  {
+    "symbol": "LT",
+    "class": "INFRA_CYCLICAL",
+    "start_price": 3750.00,
+    "isActive": true
+  },
+  {
+    "symbol": "SUNPHARMA",
+    "class": "PHARMA_HEALTHCARE",
+    "start_price": 1620.00,
+    "isActive": true
+  },
+  {
+    "symbol": "TATAELXSI",
+    "class": "MID_CAP",
+    "start_price": 7800.00,
+    "isActive": true
+  },
+  {
+    "symbol": "CDSL",
+    "class": "SMALL_CAP",
+    "start_price": 1950.00,
     "isActive": true
   },
   {
     "symbol": "SUZLON",
-    "class": "PENNY_STOCK",
-    "start_price": 40.20,
+    "class": "MICRO_CAP_PENNY",
+    "start_price": 42.50,
     "isActive": true
   },
   {
-    "symbol": "BTCUSDT",
-    "class": "CRYPTO_MAJOR",
-    "start_price": 68500.00,
-    "isActive": true
-  },
-  {
-    "symbol": "DOGE",
-    "class": "MEME_COIN",
-    "start_price": 15.20,
-    "isActive": true
-  },
-  {
-    "symbol": "MRF",
-    "class": "PREMIUM_EQUITY",
-    "start_price": 135000.00,
+    "symbol": "IDEA",
+    "class": "MICRO_CAP_PENNY",
+    "start_price": 13.80,
     "isActive": true
   }
 ]
