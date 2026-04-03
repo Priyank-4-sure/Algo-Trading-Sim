@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/config"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/models"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils"
 	"github.com/GC-OpenSoft-2026/Algorithmic-Trading-Simulator/internal/utils/response"
@@ -36,8 +35,8 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenString != "" {
-		cfg, _ := config.LoadConfig()
-		claims, err := utils.ValidateToken(tokenString, cfg.Server.JWTSecret)
+		// USE THE INJECTED CONFIG HERE
+		claims, err := utils.ValidateToken(tokenString, h.Config.Server.JWTSecret)
 		if err == nil {
 			userID = claims.UserID
 			slog.Info("Authenticated WS connection", "userID", userID)
@@ -79,7 +78,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			// (In a real app, this triggers a Redis Pub/Sub subscription)
 			switch {
 			case len(msg.Topic) > 9 && msg.Topic[:9] == "orderbook":
-				go h.streamLobSnapshot(ctx, c, msg.Topic) // Run in a background thread
+				go h.streamLobSnapshot(ctx, c, msg.Topic) // Run in a background thread (Assuming you want streamOrderbook or streamLobSnapshot here)
 			case len(msg.Topic) > 7 && msg.Topic[:7] == "candles":
 				go h.streamCandles(ctx, c, msg.Topic)
 			case len(msg.Topic) > 9 && msg.Topic[:9] == "portfolio":
@@ -101,7 +100,6 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 }
 
 func (h *Handler) streamOrderbook(ctx context.Context, c *websocket.Conn, topic string) {

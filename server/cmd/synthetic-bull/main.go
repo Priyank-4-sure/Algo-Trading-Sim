@@ -83,7 +83,7 @@ func main() {
 		log.Fatal("Failed to init storage schema:", err)
 	}
 
-	apphandlers := handlers.New(dbConnections, orderStream, store)
+	apphandlers := handlers.New(dbConnections, orderStream, store, cfg)
 	r := api.SetupRouter(apphandlers)
 
 	log.Println("Initializing the Backend and Simulations...")
