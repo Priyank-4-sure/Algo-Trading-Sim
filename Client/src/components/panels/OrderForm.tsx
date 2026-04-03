@@ -16,9 +16,97 @@ export function OrderForm({ symbol, currentPrice }: OrderFormProps) {
    
    const { cashBalance } = usePortfolio();
 
-   
-   // 2. CREATE A DYNAMIC STATE FOR THE LIVE MARKET PRICE
-   const [liveMarketPrice, setLiveMarketPrice] = useState(currentPrice);
+  // NEW: State to hold the pending orders fetched from the Go backend
+  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const [isFetchingOrders, setIsFetchingOrders] = useState(false);
+
+  // NEW: Function to fetch active orders (GET request matching your Go handler)
+  const fetchPendingOrders = async () => {
+    const token = localStorage.getItem("access_token");
+
+    if (!token) return;
+
+    setIsFetchingOrders(true);
+    try {
+
+      const response = await fetch(`${API_BASE_URL}/orders/active`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Accessing data.orders based on your Go GeneralSuccess response structure
+        const fetchedOrders = result.data?.orders || [];
+        setPendingOrders(fetchedOrders);
+      }
+    } catch (err) {
+      console.error(
+        "[fetchPendingOrders]: Failed to fetch orders. Error:",
+        err,
+      );
+    } finally {
+      setIsFetchingOrders(false);
+    }
+  };
+
+  // NEW: Function to handle order cancellation
+  const handleCancelOrder = async (orderId: string) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      alert("Authentication Error: No token found. Please log in again.");
+      return;
+    }
+
+    // Optional: Add a confirmation prompt before cancelling
+    if (!window.confirm("Are you sure you want to cancel this order?")) {
+      return;
+    }
+
+    try {
+      console.log(`[handleCancelOrder]: Cancelling order ${orderId}`);
+
+      // Assuming your Go backend expects a DELETE request to /orders/{id}
+      // Adjust the endpoint if your backend uses a different route (e.g., POST /orders/cancel)
+      const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        // Try to parse error message from backend
+        let errorMessage = `Failed to cancel order (HTTP ${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {
+          // Ignore parsing error if response is not JSON
+        }
+        throw new Error(errorMessage);
+      }
+
+      console.log(
+        `[handleCancelOrder]: Order ${orderId} cancelled successfully.`,
+      );
+
+      // Refresh the pending orders list to reflect the cancellation
+      fetchPendingOrders();
+    } catch (err: any) {
+      console.error(" [handleCancelOrder]: Error:", err);
+      alert(`Error cancelling order: ${err.message}`);
+    }
+  };
+
+  // Fetch when tab changes to 'pending'
+  useEffect(() => {
+    if (tab === "pending") {
+      fetchPendingOrders();
+    }
+  }, [tab]);
+
+  // 2. CREATE A DYNAMIC STATE FOR THE LIVE MARKET PRICE
+  const [liveMarketPrice, setLiveMarketPrice] = useState(currentPrice);
 
    const [price, setPrice] = useState(0); // Limit price
    const [amount, setAmount] = useState(0);
