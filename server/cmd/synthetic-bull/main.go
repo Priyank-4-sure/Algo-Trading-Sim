@@ -179,7 +179,7 @@ func main() {
 
 	// 9. Synthetic Market Maker — uses activeSymbols
 	marketMaker := synthetic.NewMarketMaker(marketManager, orderStream)
-	go marketMaker.Start(activeSymbols, 100*time.Millisecond)
+	go marketMaker.Start(ctxWorkers, activeSymbols, 100*time.Millisecond)
 
 	// 10. Noise Trader — passes ctxWorkers so it can be gracefully shut down
 	noiseTrader := noise.NewAgent(marketManager, orderStream, tickerTape)
