@@ -17,6 +17,7 @@ import { LoginPage } from './components/pages/LoginPage';
 import { SignUpPage } from './components/pages/SignUpPage';
 import { WatchlistPage } from './components/pages/WatchlistPage';
 import { useAuth } from './hooks/useAuth';
+import { Toaster } from 'react-hot-toast';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
@@ -82,5 +83,10 @@ export default function App() {
     );
   }
 
-  return <RouterProvider router={router} />;
+  return (
+  <>
+    <Toaster position="top-right" reverseOrder={false} />
+    <RouterProvider router={router} />
+  </>
+);
 }
