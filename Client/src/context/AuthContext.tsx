@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { isTokenExpired } from '../utils/token';
 
 export interface User {
   id: number;
@@ -23,19 +24,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    setAccessToken(null);
+    setUser(null);
+    setIsAuthenticated(false);
+  }, []);
+
   // Initialize from localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem('access_token');
     const storedUser = localStorage.getItem('user');
+    
     if (storedToken) {
-      setAccessToken(storedToken);
-      setIsAuthenticated(true);
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      if (isTokenExpired(storedToken)) {
+        console.warn('Token expired on load, logging out...');
+        logout();
+      } else {
+        setAccessToken(storedToken);
+        setIsAuthenticated(true);
+        if (storedUser) {
+          try {
+            setUser(JSON.parse(storedUser));
+          } catch (e) {
+            console.error('Failed to parse stored user:', e);
+          }
+        }
       }
     }
     setLoading(false);
-  }, []);
+  }, [logout]);
 
   const login = (token: string, refreshToken: string, userData?: User) => {
     localStorage.setItem('access_token', token);
@@ -46,15 +66,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     setAccessToken(token);
     setIsAuthenticated(true);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    setAccessToken(null);
-    setUser(null);
-    setIsAuthenticated(false);
   };
 
   return (

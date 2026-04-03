@@ -90,6 +90,11 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
         },
       })
         .then((res) => {
+          if (res.status === 401) {
+            console.warn("Session expired (401), logging out...");
+            onLogout();
+            return;
+          }
           if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
           return res.json();
         })
@@ -134,6 +139,11 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          console.warn("Session expired (401), logging out...");
+          onLogout();
+          return;
+        }
         throw new Error(`HTTP Error: ${response.status}`);
       }
     } catch (err) {
