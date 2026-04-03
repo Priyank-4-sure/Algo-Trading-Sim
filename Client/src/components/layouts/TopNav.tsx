@@ -1,5 +1,5 @@
 import { 
-  Moon, Sun, Search, Bell, ChevronDown, LogOut, User, ChevronRight,
+  Moon, Sun, Search, ChevronDown, LogOut, User, ChevronRight,
   BarChart2, PieChart, Star, History, LineChart, Activity, Menu
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
@@ -15,6 +15,8 @@ interface TopNavProps {
   activeSymbol: string; 
   onSymbolChange: (symbol: string) => void;
   markets: MarketPair[]; 
+  watchlist: string[];
+  toggleWatchlist: (symbol: string) => Promise<void>;
 }
 
 export function TopNav({ 
@@ -25,7 +27,9 @@ export function TopNav({
   onProfileClick, 
   activeSymbol, 
   onSymbolChange,
-  markets 
+  markets,
+  watchlist,
+  toggleWatchlist
 }: TopNavProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -86,7 +90,7 @@ export function TopNav({
           >
             <Menu size={18} />
           </button>
-          <img src="/src/logo/logo.webp" alt="NextBull Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
+          <img src="/assets/images/logo.webp" alt="NextBull Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
           <span className="font-semibold text-base md:text-xl tracking-wide text-white hidden sm:block">NEXTBULL</span>
         </div>
 
@@ -129,14 +133,18 @@ export function TopNav({
                         <button key={cat} className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border transition-all ${cat === 'All' ? 'bg-panel border-white text-main' : 'border-main text-muted hover:text-main hover:border-white/50'}`}>{cat}</button>
                       ))}
                     </div>
-                    {filteredPairs.map((pair) => (
-                      <button
+                    {filteredPairs.map((pair) => {
+                      const isWatched = watchlist.includes(pair.symbol);
+                      return (
+                      <div
                         key={pair.symbol}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
                           onSymbolChange(pair.symbol);
                           setIsPickerOpen(false);
                         }}
-                        className="w-full flex items-center justify-between p-3 hover:bg-panel transition-colors group"
+                        className="w-full flex items-center justify-between p-3 hover:bg-panel transition-colors group cursor-pointer"
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 ${pair.iconColor || 'bg-main border border-main'} rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm transition-transform group-hover:scale-110`}>
@@ -147,13 +155,25 @@ export function TopNav({
                             <span className="text-xs text-muted">{pair.name}</span>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-xs font-mono font-bold text-main">{pair.price}</span>
-                          <span className={`text-[10px] font-bold ${pair.isPositive ? 'text-up' : 'text-down'}`}>{pair.change}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-xs font-mono font-bold text-main">{pair.price}</span>
+                            <span className={`text-[10px] font-bold ${pair.isPositive ? 'text-up' : 'text-down'}`}>{pair.change}</span>
+                          </div>
+                          {activeSymbol === pair.symbol && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleWatchlist(pair.symbol);
+                            }}
+                            className={`p-0.5 transition-colors ${isWatched ? 'text-yellow-400' : 'text-muted hover:text-yellow-400'}`}
+                            title={isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                          >
+                            <Star size={14} fill={isWatched ? 'currentColor' : 'none'} />
+                          </button>
                         </div>
-                        {activeSymbol === pair.symbol && <div className="ml-2 w-1.5 h-1.5 rounded-full bg-white" />}
-                      </button>
-                    ))}
+                      </div>
+                    )})}
                     {filteredPairs.length === 0 && (
                       <div className="p-8 text-center text-muted text-sm">No results found for "{searchQuery}"</div>
                     )}

@@ -1,22 +1,20 @@
 import { useState } from 'react';
 import { Eye, EyeOff, ArrowRight, Lock, Mail, User, ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom'; // 1. Import useNavigate
+import { useNavigate } from 'react-router-dom';
 import { GuestTopNav } from '../layouts/GuestTopNav';
+import { useAuth } from '../../hooks/useAuth';
+import { API_BASE_URL } from '../../config';
 
 interface SignUpPageProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
-  // Optional: keeping for compatibility during the transition
   onGoToLogin?: () => void;
   onGoToHome?: () => void;
 }
 
-import { useAuth } from '../../hooks/useAuth';
-import { API_BASE_URL } from '../../config';
-
 export function SignUpPage({ darkMode, toggleDarkMode }: SignUpPageProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
@@ -49,10 +47,10 @@ export function SignUpPage({ darkMode, toggleDarkMode }: SignUpPageProps) {
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          full_name: fullName, 
-          email, 
-          password 
+        body: JSON.stringify({
+          full_name: fullName,
+          email,
+          password
         }),
       });
 
@@ -62,7 +60,6 @@ export function SignUpPage({ darkMode, toggleDarkMode }: SignUpPageProps) {
         throw new Error(data.error || 'Registration failed');
       }
 
-      // Automatically login after registration
       login(data.access_token, data.refresh_token, {
         id: 0,
         email: email,
@@ -77,179 +74,235 @@ export function SignUpPage({ darkMode, toggleDarkMode }: SignUpPageProps) {
     }
   };
 
+  const inputClass = (dark: boolean) =>
+    `w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none border transition-all focus:ring-2 ${
+      dark
+        ? 'bg-white/5 border-white/8 text-white placeholder-white/20 focus:border-blue-500/50 focus:ring-blue-500/10'
+        : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-400 focus:ring-blue-400/10'
+    }`;
+
+  const labelClass = (dark: boolean) =>
+    `block text-[10px] font-black uppercase tracking-[0.2em] ${
+      dark ? 'text-slate-500' : 'text-slate-400'
+    }`;
+
+  const iconColor = darkMode ? 'rgba(255,255,255,0.3)' : '#94a3b8';
+
   return (
-    <div className="min-h-screen w-full flex flex-col font-sans transition-colors duration-500 bg-main text-main">
-      
-      {/* ─── SHARED TOP NAVIGATION ─── */}
-      <GuestTopNav 
+    <div
+      className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-500 ${
+        darkMode ? 'bg-black text-white' : 'bg-slate-50 text-slate-900'
+      }`}
+    >
+      {/* ─── NAV ─── */}
+      <GuestTopNav
         darkMode={darkMode}
         toggleDarkMode={toggleDarkMode}
-        onLogin={() => navigate('/login')} // 5. Use navigate
-        onSignUp={() => {}} 
-        onGoHome={() => navigate('/')}      // 5. Use navigate
+        onLogin={() => navigate('/login')}
+        onSignUp={() => {}}
+        onGoHome={() => navigate('/')}
       />
 
-      <div className="flex-1 w-full flex items-center justify-center relative overflow-hidden">
-        {/* --- BACKGROUND ELEMENTS (Keeping Existing JSX) --- */}
+      <div className="flex-1 w-full flex items-center justify-center relative overflow-hidden px-4 py-12">
+
+        {/* ─── BACKGROUND ─── */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className={`absolute inset-0 ${darkMode ? 'opacity-[0.15]' : 'opacity-[0.05]'}`} 
+          <div
+            className={`absolute inset-0 ${darkMode ? 'opacity-[0.05]' : 'opacity-[0.04]'}`}
             style={{
-              backgroundImage: `radial-gradient(${darkMode ? '#334155' : '#94a3b8'} 1px, transparent 1px)`,
-              backgroundSize: '24px 24px'
-            }} 
+              backgroundImage: `linear-gradient(${darkMode ? '#1e293b' : '#cbd5e1'} 1px, transparent 1px),
+                                linear-gradient(90deg, ${darkMode ? '#1e293b' : '#cbd5e1'} 1px, transparent 1px)`,
+              backgroundSize: '60px 60px',
+            }}
           />
-          <div className={`absolute inset-0 ${darkMode ? 'opacity-20' : 'opacity-10'}`} 
-            style={{
-              backgroundImage: `linear-gradient(${darkMode ? '#1e293b' : '#e2e8f0'} 1px, transparent 1px), 
-                                linear-gradient(90deg, ${darkMode ? '#1e293b' : '#e2e8f0'} 1px, transparent 1px)`,
-              backgroundSize: '100px 100px'
-            }} 
+          <div
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-[140px] ${
+              darkMode ? 'bg-blue-600/8' : 'bg-blue-300/15'
+            }`}
           />
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] rounded-full blur-[120px] ${
-            darkMode ? 'bg-blue-600/10' : 'bg-blue-400/5'
-          }`} />
-        </div>
-        <div className="absolute inset-0 pointer-events-none">
-          {/* ... grid and glow divs ... */}
         </div>
 
-        <div className="relative z-10 w-full max-w-[440px] mx-4 my-8">
-          
-          {/* AUTH CARD */}
-          <div className={`backdrop-blur-2xl border rounded-[2.5rem] p-8 md:p-10 shadow-2xl transition-all duration-500 ${
-            darkMode 
-              ? 'bg-slate-900/60 border-white/10 shadow-black/40' 
-              : 'bg-white/90 border-slate-200 shadow-slate-200/60'
-          }`}>
-            <div className="mb-6 text-center">
-              <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Create Account</h2>
-              <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Join the high-frequency trading network.</p>
-            </div>
+        {/* ─── CARD ─── */}
+        <div className="relative z-10 w-full max-w-[440px]">
 
+          {/* Header above card */}
+          <div className="text-center mb-8">
+            <p className={`text-[11px] font-black uppercase tracking-[0.25em] ${
+              darkMode ? 'text-blue-400' : 'text-blue-600'
+            }`}>
+              New Account
+            </p>
+            <h1 className={`text-2xl font-black tracking-tight mt-1 ${
+              darkMode ? 'text-white' : 'text-slate-900'
+            }`}>
+              Join NEXTBULL
+            </h1>
+            <p className={`text-sm mt-1 ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+              Set up your trading account in seconds.
+            </p>
+          </div>
+
+          <div
+            className={`rounded-2xl border p-8 shadow-2xl transition-all duration-500 ${
+              darkMode
+                ? 'bg-white/[0.03] border-white/[0.08] shadow-black/60'
+                : 'bg-white border-slate-200 shadow-slate-200/60'
+            }`}
+          >
             <form className="space-y-4" onSubmit={handleFormSubmit}>
-              {/* --- FORM FIELDS (Keep Existing JSX) --- */}
+
               {/* FULL NAME */}
               <div className="space-y-1.5">
-                <label className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Full Name</label>
+                <label className={labelClass(darkMode)}>Full Name</label>
                 <div className="relative group">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
-                  <input 
+                  <User
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-blue-500"
+                    size={16}
+                    style={{ color: iconColor }}
+                  />
+                  <input
                     name="fullName"
-                    type="text" 
-                    placeholder="Alex Morgan" 
+                    type="text"
+                    placeholder="Alex Morgan"
                     required
-                    className={`w-full border rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-4 transition-all text-sm ${
-                      darkMode 
-                        ? 'bg-slate-950/40 border-white/5 text-white focus:border-blue-500/50 focus:ring-blue-500/10' 
-                        : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-blue-400 focus:ring-blue-400/10'
-                    }`} 
+                    className={inputClass(darkMode)}
                   />
                 </div>
               </div>
 
               {/* EMAIL */}
               <div className="space-y-1.5">
-                <label className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Email Address</label>
+                <label className={labelClass(darkMode)}>Email Address</label>
                 <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
-                  <input 
+                  <Mail
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-blue-500"
+                    size={16}
+                    style={{ color: iconColor }}
+                  />
+                  <input
                     name="email"
-                    type="email" 
-                    placeholder="trader@nextbull.in" 
+                    type="email"
+                    placeholder="trader@nextbull.in"
                     required
-                    className={`w-full border rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-4 transition-all text-sm ${
-                      darkMode 
-                        ? 'bg-slate-950/40 border-white/5 text-white focus:border-blue-500/50 focus:ring-blue-500/10' 
-                        : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-blue-400 focus:ring-blue-400/10'
-                    }`} 
+                    className={inputClass(darkMode)}
                   />
                 </div>
               </div>
 
-              {/* PASSWORDS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* PASSWORDS */}
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Password</label>
+                  <label className={labelClass(darkMode)}>Password</label>
                   <div className="relative group">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input 
+                    <Lock
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-blue-500"
+                      size={14}
+                      style={{ color: iconColor }}
+                    />
+                    <input
                       name="password"
-                      type={showPassword ? "text" : "password"} 
-                      placeholder="••••••••" 
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
                       required
-                      className={`w-full border rounded-xl py-2.5 pl-10 pr-4 outline-none focus:ring-4 transition-all text-sm ${
-                        darkMode 
-                          ? 'bg-slate-950/40 border-white/5 text-white focus:border-blue-500/50 focus:ring-blue-500/10' 
-                          : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-blue-400 focus:ring-blue-400/10'
-                      }`} 
+                      className={`w-full rounded-xl py-3 pl-9 pr-4 text-sm outline-none border transition-all focus:ring-2 ${
+                        darkMode
+                          ? 'bg-white/5 border-white/8 text-white placeholder-white/20 focus:border-blue-500/50 focus:ring-blue-500/10'
+                          : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-400 focus:ring-blue-400/10'
+                      }`}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Confirm</label>
+                  <label className={labelClass(darkMode)}>Confirm</label>
                   <div className="relative group">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input 
+                    <Lock
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-blue-500"
+                      size={14}
+                      style={{ color: iconColor }}
+                    />
+                    <input
                       name="confirmPassword"
-                      type={showPassword ? "text" : "password"} 
-                      placeholder="••••••••" 
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
                       required
-                      className={`w-full border rounded-xl py-2.5 pl-10 pr-4 outline-none focus:ring-4 transition-all text-sm ${
-                        darkMode 
-                          ? 'bg-slate-950/40 border-white/5 text-white focus:border-blue-500/50 focus:ring-blue-500/10' 
-                          : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-blue-400 focus:ring-blue-400/10'
-                      }`} 
+                      className={`w-full rounded-xl py-3 pl-9 pr-4 text-sm outline-none border transition-all focus:ring-2 ${
+                        darkMode
+                          ? 'bg-white/5 border-white/8 text-white placeholder-white/20 focus:border-blue-500/50 focus:ring-blue-500/10'
+                          : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-400 focus:ring-blue-400/10'
+                      }`}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* SHOW PASSWORD TOGGLE */}
-              <button 
-                type="button" 
+              {/* SHOW/HIDE TOGGLE */}
+              <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className={`text-[10px] font-bold uppercase tracking-widest ml-1 flex items-center gap-2 hover:text-blue-500 transition-colors ${darkMode ? 'text-slate-600' : 'text-slate-400'}`}
+                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors hover:text-blue-500 ${
+                  darkMode ? 'text-slate-600' : 'text-slate-400'
+                }`}
               >
-                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />} 
-                {showPassword ? 'Hide Secret Key' : 'Show Secret Key'}
+                {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showPassword ? 'Hide passwords' : 'Show passwords'}
               </button>
 
-              {/* TERMS FOOTER */}
-              <div className={`p-3 rounded-xl border flex items-start gap-3 mt-4 ${
-                darkMode ? 'bg-blue-500/5 border-blue-500/10' : 'bg-slate-50 border-slate-100'
-              }`}>
-                <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={16} />
-                <p className="text-[10px] leading-relaxed text-slate-500">
-                  By initializing this account, you agree to our <b>Institutional Protocol</b> and automated execution risk terms.
+              {/* TERMS NOTE */}
+              <div
+                className={`flex items-start gap-3 p-3 rounded-xl border ${
+                  darkMode
+                    ? 'bg-blue-500/5 border-blue-500/10'
+                    : 'bg-slate-50 border-slate-100'
+                }`}
+              >
+                <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={14} />
+                <p className={`text-[10px] leading-relaxed ${
+                  darkMode ? 'text-slate-500' : 'text-slate-500'
+                }`}>
+                  By creating an account you agree to our <b>Institutional Protocol</b> and simulation risk terms.
                 </p>
               </div>
-              {/* ... Name, Email, Passwords ... */}
+
+              {/* ERROR */}
               {error && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-1">
                   {error}
                 </div>
               )}
-              <button 
-                type="submit" 
+
+              {/* SUBMIT */}
+              <button
+                type="submit"
                 disabled={isLoading}
-                className={`w-full ${isLoading ? 'bg-blue-800 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'} text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-blue-600/25 mt-2 flex items-center justify-center gap-2 group transition-all active:scale-[0.97]`}
+                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98] group mt-1 ${
+                  isLoading
+                    ? 'bg-blue-800 cursor-not-allowed text-blue-300'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                }`}
               >
-                {isLoading ? 'Creating Account...' : 'Create Account'} 
-                {!isLoading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {!isLoading && (
+                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                )}
               </button>
             </form>
 
-            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-white/5 text-center">
-              {/* 6. Use navigate for the footer link */}
-              <div className='flex justify-center gap-1'>
-              <p className="text-[10px] font-black uppercase tracking-[0.15em] transition-colors">Existing User?</p>
-              <button 
-                onClick={() => navigate('/login')} 
-                className="text-[10px] text-blue-600 hover:text-blue-500 font-black uppercase tracking-[0.15em] transition-colors"
-              >
-                Sign In
-              </button></div>
+            {/* FOOTER */}
+            <div
+              className={`mt-6 pt-5 border-t text-center ${
+                darkMode ? 'border-white/5' : 'border-slate-100'
+              }`}
+            >
+              <p className={`text-[11px] ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Already have an account?{' '}
+                <button
+                  onClick={() => navigate('/login')}
+                  className="font-black text-blue-500 hover:text-blue-400 transition-colors"
+                >
+                  Sign in
+                </button>
+              </p>
             </div>
           </div>
         </div>

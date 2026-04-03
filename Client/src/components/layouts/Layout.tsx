@@ -183,6 +183,8 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
           activeSymbol={activeSymbol}
           onSymbolChange={setActiveSymbol}
           markets={markets}
+          watchlist={watchlist}
+          toggleWatchlist={toggleWatchlist}
         />
         
         <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full">
