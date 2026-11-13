@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Activity,
-  ChevronDown,
 } from "lucide-react";
 import { usePortfolio } from "../../hooks/usePortfolio";
 import { AnimatedValue } from "../shared/AnimatedValue";

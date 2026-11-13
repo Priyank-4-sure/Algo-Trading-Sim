@@ -37,7 +37,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const storedToken = localStorage.getItem('access_token');
     const storedUser = localStorage.getItem('user');
-    
+    setIsAuthenticated(true);
     if (storedToken) {
       if (isTokenExpired(storedToken)) {
         console.warn('Token expired on load, logging out...');

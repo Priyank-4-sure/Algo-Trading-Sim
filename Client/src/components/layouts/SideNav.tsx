@@ -1,5 +1,5 @@
 // 1. Added Star to the lucide-react imports
-import { LineChart, BarChart2, PieChart, History, Activity, Menu, LogOut, Star } from 'lucide-react';
+import { BarChart2, PieChart, History, Activity, Menu, LogOut, Star } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 

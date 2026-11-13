@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useOrderBook, PriceLevel } from "../../hooks/useOrderBook";
+import { useOrderBook } from "../../hooks/useOrderBook";
 
 interface OrderBookProps {
   symbol: string;

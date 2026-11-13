@@ -165,8 +165,8 @@ export class DrawingManager {
 
   private createLine(
     color: string,
-    width: number,
-    style: number,
+    width: 1|2|3|4,
+    style: LineStyle,
     data: { time: any; value: number }[]
   ): ISeriesApi<'Line'> | null {
     if (!this.chart) return null;

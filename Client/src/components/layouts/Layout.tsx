@@ -38,7 +38,7 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   // 1. Initialize global state
   const [activeSymbol, setActiveSymbol] = useState("");
   const [markets, setMarkets] = useState<MarketPair[]>([]);
-  const [positions, setPositions] = useState<Position[]>(MOCK_POSITIONS);
+  const [positions] = useState<Position[]>(MOCK_POSITIONS);
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 

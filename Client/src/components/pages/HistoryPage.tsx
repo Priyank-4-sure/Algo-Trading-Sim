@@ -1,11 +1,8 @@
 import { useState, useEffect, useContext } from "react";
 import {
-  ArrowUpRight,
-  ArrowDownRight,
   Search,
   Download,
   Calendar,
-  Filter,
   RefreshCw,
 } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
@@ -150,10 +147,6 @@ export function HistoryPage() {
     link.download = "trade_history.csv";
     link.click();
   };
-
-  const totalPnL = filteredTrades.reduce((sum, t) => sum + t.pnl, 0);
-  const wins = filteredTrades.filter((t) => t.pnl > 0).length;
-  const losses = filteredTrades.filter((t) => t.pnl < 0).length;
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
