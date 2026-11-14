@@ -12,24 +12,28 @@ interface TopNavProps {
   toggleMobileNav: () => void;
   onLogout: () => void;
   onProfileClick: () => void;
-  activeSymbol: string; 
+  activeSymbol: string;
   onSymbolChange: (symbol: string) => void;
-  markets: MarketPair[]; 
+  markets: MarketPair[];
   watchlist: string[];
   toggleWatchlist: (symbol: string) => Promise<void>;
+  isOffline: boolean;
+  onToggleOffline: () => void;
 }
 
-export function TopNav({ 
-  darkMode, 
-  toggleDarkMode, 
+export function TopNav({
+  darkMode,
+  toggleDarkMode,
   toggleMobileNav,
-  onLogout, 
-  onProfileClick, 
-  activeSymbol, 
+  onLogout,
+  onProfileClick,
+  activeSymbol,
   onSymbolChange,
   markets,
   watchlist,
-  toggleWatchlist
+  toggleWatchlist,
+  isOffline,
+  onToggleOffline
 }: TopNavProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);

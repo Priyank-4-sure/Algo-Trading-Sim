@@ -7,6 +7,7 @@ import { API_BASE_URL } from "../../config";
 import { SYMBOL_META } from "../../data/symbolMeta";
 import { useMarketPrices, MarketPriceData } from "../../hooks/useMarketPrices";
 import { usePortfolio, Holding } from "../../hooks/usePortfolio";
+import { generateAllMockPrices, resetMockPrices } from "../../data/mockPriceGenerator";
 
 // 👇 IMPORTANT: Adjust this import path to match where your AuthContext is located
 import { AuthContext } from "../../context/AuthContext";
@@ -27,6 +28,8 @@ export interface DashboardContextType {
   updatePrice: (id: string, newPrice: number, change24h: number) => void;
   watchlist: string[];
   toggleWatchlist: (symbol: string) => Promise<void>;
+  isOffline: boolean;
+  setIsOffline: (value: boolean) => void;
 }
 
 export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
@@ -41,9 +44,18 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   const [positions] = useState<Position[]>(MOCK_POSITIONS);
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isOffline, setIsOfflineState] = useState(false);
 
   // Portfolio holdings streamed via WebSocket (single shared connection)
   const { holdings, updatePrice } = usePortfolio();
+
+  // Initialize mock prices on mount if going offline
+  useEffect(() => {
+    if (isOffline) {
+      const knownSymbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
+      generateAllMockPrices(knownSymbols);
+    }
+  }, [isOffline]);
 
   // Fetch assets and watchlist from the backend API
   useEffect(() => {
@@ -158,6 +170,20 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
     }
   };
 
+  // 4. Handler for toggling offline mode
+  const handleToggleOffline = useCallback(() => {
+    if (isOffline) {
+      // Switch back to online mode
+      resetMockPrices();
+      setIsOfflineState(false);
+    } else {
+      // Switch to offline/fake mode
+      const knownSymbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
+      generateAllMockPrices(knownSymbols);
+      setIsOfflineState(true);
+    }
+  }, [isOffline]);
+
   // 3. Live price updates via WebSocket
   const handlePriceUpdate = useCallback((prices: MarketPriceData[]) => {
     setMarkets((prev) =>
@@ -195,11 +221,13 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
           markets={markets}
           watchlist={watchlist}
           toggleWatchlist={toggleWatchlist}
+          isOffline={isOffline}
+          onToggleOffline={handleToggleOffline}
         />
         
         <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full">
           {/* 2. Pass everything down through the Outlet context */}
-          <Outlet context={{ activeSymbol, setActiveSymbol, markets, positions, holdings, updatePrice, watchlist, toggleWatchlist } satisfies DashboardContextType} />
+          <Outlet context={{ activeSymbol, setActiveSymbol, markets, positions, holdings, updatePrice, watchlist, toggleWatchlist, isOffline, setIsOffline: setIsOfflineState } satisfies DashboardContextType} />
         </main>
       </div>
     </div>
