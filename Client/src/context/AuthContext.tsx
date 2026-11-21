@@ -14,6 +14,7 @@ export interface AuthContextType {
   loading: boolean;
   login: (accessToken: string, refreshToken: string, userData?: User) => void;
   logout: () => void;
+  toggleOfflineMode: (offline: boolean) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,7 +38,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const storedToken = localStorage.getItem('access_token');
     const storedUser = localStorage.getItem('user');
-    setIsAuthenticated(true);
     if (storedToken) {
       if (isTokenExpired(storedToken)) {
         console.warn('Token expired on load, logging out...');
@@ -68,10 +68,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(true);
   };
 
+  const toggleOfflineMode = useCallback((offline: boolean) => {
+    if (offline) {
+      // Go offline: remove token, keep local data
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      setAccessToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+    } else {
+      // Go online - token would be restored if it exists
+      // This is handled by the auth state management
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, accessToken, loading, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, accessToken, loading, login, logout, toggleOfflineMode }}>
       {children}
     </AuthContext.Provider>
   );
 };
-

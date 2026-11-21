@@ -2,18 +2,43 @@ import { Star, TrendingUp, TrendingDown } from 'lucide-react';
 import { useWatchlistData } from '../../hooks/useWatchlistData';
 import { getSymbolMeta } from '../../data/symbolMeta';
 import { API_BASE_URL } from '../../config';
+import { retrieveWatchlist, storeWatchlist } from '../../data/mockStorage';
+import { useAuth } from '../../hooks/useAuth';
+import { useOutletContext } from 'react-router-dom';
+import { DashboardContextType } from '../../components/layouts/Layout';
+import { MarketPriceData } from '../../hooks/useMarketPrices';
 
 export function Balances() {
-  const { data, loading, refetch } = useWatchlistData();
+  // Get watchlist from the Layout context
+  const { watchlist } = useOutletContext<DashboardContextType>();
+  const { data, loading, refetch } = useWatchlistData(watchlist);
+  const { accessToken } = useAuth();
+
+  // Check if we're in offline mode via AuthContext
+  const isOffline = !accessToken;
 
   const handleRemove = async (symbol: string) => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
+    const token = accessToken;
+
+    if (!token) {
+      // Offline mode: update localStorage watchlist
+      const currentWatchlist = retrieveWatchlist();
+      const updatedWatchlist = currentWatchlist.filter(s => s !== symbol);
+      storeWatchlist(updatedWatchlist);
+      return;
+    }
+
+    // Online mode: update via API and also remove from localStorage watchlist
     try {
       await fetch(`${API_BASE_URL}/watchlist/${symbol}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
+      // Also remove from localStorage watchlist so refetch picks up the change
+      const currentWatchlist = retrieveWatchlist();
+      const updatedWatchlist = currentWatchlist.filter(s => s !== symbol);
+      storeWatchlist(updatedWatchlist);
+      // Refetch to update UI with the new watchlist
       refetch();
     } catch (err) {
       console.error('Failed to remove from watchlist:', err);
@@ -35,9 +60,11 @@ export function Balances() {
           {loading ? (
             <div className="text-center text-muted text-xs py-4">Loading...</div>
           ) : data.length === 0 ? (
-            <div className="text-center text-muted text-xs py-4">No symbols in watchlist</div>
+            <div className="text-center text-muted text-xs py-4">
+              {isOffline ? 'No symbols in offline watchlist' : 'No symbols in watchlist'}
+            </div>
           ) : (
-            data.map(item => {
+            data.map((item: MarketPriceData) => {
               const meta = getSymbolMeta(item.symbol);
               const isPositive = item.change_24h >= 0;
               return (
@@ -60,8 +87,12 @@ export function Balances() {
                   </div>
                   <div className="flex flex-col items-end leading-tight">
                     <span className="font-semibold text-main font-mono">₹{item.price.toFixed(2)}</span>
-                    <span className={`text-[10px] font-bold flex items-center gap-0.5 ${isPositive ? 'text-up' : 'text-down'}`}>
-                      {isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                    <span className="text-[10px] font-bold flex items-center gap-0.5">
+                      {isPositive ? (
+                        <TrendingUp size={10} />
+                      ) : (
+                        <TrendingDown size={10} />
+                      )}
                       {isPositive ? '+' : ''}{item.change_24h.toFixed(2)}%
                     </span>
                   </div>

@@ -13,6 +13,9 @@ import {
 import { MiniSparkline } from "../shared/MiniSparkline";
 import { DashboardContextType } from "../layouts/Layout";
 import { API_BASE_URL } from "../../config";
+import { generateAllMockPrices } from "../../data/mockPriceGenerator";
+import { useAuth } from "../../hooks/useAuth";
+import { useMarketPrices, MarketPriceData } from "../../hooks/useMarketPrices";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -166,29 +169,35 @@ export function MarketsPage() {
   const { setActiveSymbol, watchlist, toggleWatchlist } =
     useOutletContext<DashboardContextType>();
   const navigate = useNavigate();
+  const { accessToken } = useAuth();
 
-  // Asset definitions fetched once from /v1/assets
-  const [assetDefs, setAssetDefs] = useState<AssetDefinition[]>([]);
-  const [assetsLoading, setAssetsLoading] = useState(true);
+// Check if we're in offline mode
+const isOffline = !accessToken;
+
+// Asset definitions - fetched from API or use mock data
+  const [assetDefs, setAssetDefs] = useState<AssetDefinition[]>(isOffline ? [] : []);
+  const [assetsLoading, setAssetsLoading] = useState(isOffline ? false : true);
   const [assetsError, setAssetsError] = useState<string | null>(null);
-
-  const [markets, setMarkets] = useState<MarketAsset[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [pollInterval, setPollInterval] = useState<PollInterval>(
-    DEFAULT_POLL_INTERVAL,
-  );
-  const [countdown, setCountdown] = useState<number>(
-    DEFAULT_POLL_INTERVAL / 1000,
-  );
-
-  const [filter, setFilter] = useState<"all" | "gainers" | "losers">("all");
-  const [searchQuery, setSearchQuery] = useState("");
 
   // ── Step 1: Fetch asset definitions ───────────────────────────────────────
 
   useEffect(() => {
+    if (isOffline) {
+      // Use mock asset definitions for offline mode
+      const mockAssets = [
+        { ticker: "Tech", class: "BLUE_CHIP", start_price: 64230.50, status: "active" },
+        { ticker: "Meme", class: "VOLATILE", start_price: 3380.20, status: "active" },
+        { ticker: "BANK", class: "STABLE", start_price: 148.45, status: "active" },
+        { ticker: "AAPL", class: "BLUE_CHIP", start_price: 189.45, status: "active" },
+        { ticker: "TSLA", class: "VOLATILE", start_price: 175.22, status: "active" },
+      ];
+      setAssetDefs(mockAssets);
+      setAssetsLoading(false);
+      // Initialize mock prices and generate data
+      generateAllMockPrices(mockAssets.map(a => a.ticker));
+      return;
+    }
+
     const fetchAssets = async () => {
       setAssetsLoading(true);
       setAssetsError(null);
@@ -215,7 +224,63 @@ export function MarketsPage() {
     };
 
     fetchAssets();
-  }, []);
+  }, [isOffline]);
+
+  const [markets, setMarkets] = useState<MarketAsset[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [pollInterval, setPollInterval] = useState<PollInterval>(
+    DEFAULT_POLL_INTERVAL,
+  );
+  const [countdown, setCountdown] = useState<number>(
+    DEFAULT_POLL_INTERVAL / 1000,
+  );
+
+  const [filter, setFilter] = useState<"all" | "gainers" | "losers">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Use useMarketPrices to provide live price updates in offline mode
+  // Hook called at top level (after asset state is initialized)
+  const updateHandler = (prices: MarketPriceData[]) => {
+    // Convert the price data to MarketAsset format
+    const marketAssets = prices.map(price => {
+      const def = assetDefs.find(d => d.ticker === price.symbol);
+      const iconColor = def ? CLASS_META[def.class].iconColor : "bg-main";
+      return {
+        symbol: price.symbol,
+        name: tickerToName(price.symbol),
+        icon: tickerToIcon(price.symbol),
+        iconColor,
+        price: `₹${price.price.toFixed(2)}`,
+        change: `${price.change_24h >= 0 ? "+" : ""}${price.change_24h.toFixed(2)}%`,
+        isPositive: price.change_24h >= 0,
+        high: price.high_24h > 0 ? `₹${price.high_24h.toFixed(2)}` : "-",
+        low: price.low_24h > 0 ? `₹${price.low_24h.toFixed(2)}` : "-",
+        volume: formatVolume(price.volume_24h),
+        sparkline: price.sparkline,
+      };
+    });
+    setMarkets(marketAssets);
+  };
+
+  // Initialize mock prices when component mounts in offline mode
+  useEffect(() => {
+    if (isOffline) {
+      const mockAssets = [
+        { ticker: "Tech", class: "BLUE_CHIP", start_price: 64230.50, status: "active" },
+        { ticker: "Meme", class: "VOLATILE", start_price: 3380.20, status: "active" },
+        { ticker: "BANK", class: "STABLE", start_price: 148.45, status: "active" },
+        { ticker: "AAPL", class: "BLUE_CHIP", start_price: 189.45, status: "active" },
+        { ticker: "TSLA", class: "VOLATILE", start_price: 175.22, status: "active" },
+      ];
+      setAssetDefs(mockAssets);
+      setAssetsLoading(false);
+      generateAllMockPrices(mockAssets.map(a => a.ticker));
+    }
+  }, [isOffline]);
+
+  useMarketPrices(updateHandler);
 
   // ── Step 2: Fetch market data for each symbol ──────────────────────────────
   // Only runs after assetDefs are loaded.
@@ -269,15 +334,17 @@ export function MarketsPage() {
     }
   }, [assetDefs]);
 
-  // Trigger initial market fetch once assets are ready
+  // Trigger initial market fetch once assets are ready (only in online mode)
   useEffect(() => {
+    if (isOffline) return; // Skip API fetching in offline mode
     if (assetDefs.length === 0) return;
     setLoading(true);
     fetchMarkets();
-  }, [assetDefs, fetchMarkets]);
+  }, [assetDefs, fetchMarkets, isOffline]);
 
-  // Polling with countdown
+  // Polling with countdown (only in online mode)
   useEffect(() => {
+    if (isOffline) return; // Skip polling in offline mode
     if (assetDefs.length === 0 || pollInterval === 0) {
       setCountdown(0);
       return;
@@ -298,11 +365,11 @@ export function MarketsPage() {
       clearInterval(tick);
       clearInterval(poll);
     };
-  }, [pollInterval, fetchMarkets, assetDefs]);
+  }, [pollInterval, fetchMarkets, assetDefs, isOffline]);
 
   // ── Derived Data ───────────────────────────────────────────────────────────
 
-  const filteredData = markets.filter((a) => {
+  const filteredData = (markets || []).filter((a) => {
     if (
       searchQuery &&
       !a.symbol.toLowerCase().includes(searchQuery.toLowerCase()) &&

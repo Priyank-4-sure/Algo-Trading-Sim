@@ -44,7 +44,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ darkMode, toggleDarkMo
   const { isAuthenticated } = useAuth();
 
   const handleStartTrading = () => {
-    navigate(isAuthenticated ? '/app/trade' : '/login');
+    // If authenticated, go to trade page; otherwise, go to app in offline mode
+    navigate(isAuthenticated ? '/app/trade' : '/app');
   };
 
   return (
@@ -126,7 +127,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ darkMode, toggleDarkMo
             onClick={handleStartTrading}
             className="group flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl text-sm font-black uppercase tracking-widest shadow-xl shadow-blue-600/25 transition-all active:scale-95"
           >
-            {isAuthenticated ? 'Go to Dashboard' : 'Start Trading Now'}
+            {isAuthenticated ? 'Go to Dashboard' : 'Start Trading (Offline Mode)'}
             <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
           </button>
 
@@ -327,7 +328,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ darkMode, toggleDarkMo
               onClick={handleStartTrading}
               className="group inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-xl text-sm font-black uppercase tracking-widest shadow-xl shadow-blue-600/25 transition-all active:scale-95"
             >
-              {isAuthenticated ? 'Go to Dashboard' : 'Start Trading for Free'}
+              {isAuthenticated ? 'Go to Dashboard' : 'Start Trading (Offline Mode)'}
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </button>
 

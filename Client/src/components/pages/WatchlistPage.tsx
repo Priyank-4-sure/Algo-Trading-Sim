@@ -1,13 +1,17 @@
 import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useContext, useState, useEffect } from 'react';
 import { Star, TrendingUp, TrendingDown, BookOpen } from 'lucide-react';
 import { DashboardContextType } from '../layouts/Layout';
 import { useWatchlistData } from '../../hooks/useWatchlistData';
 import { getSymbolMeta } from '../../data/symbolMeta';
+import { useMarketPrices, MarketPriceData } from '../../hooks/useMarketPrices';
+import { generateAllMockPrices } from '../../data/mockPriceGenerator';
+import { AuthContext } from '../../context/AuthContext';
 
 export function WatchlistPage() {
-  const { setActiveSymbol, toggleWatchlist } = useOutletContext<DashboardContextType>();
+  const { setActiveSymbol, toggleWatchlist, watchlist } = useOutletContext<DashboardContextType>();
   const navigate = useNavigate();
-  const { data, loading, refetch } = useWatchlistData();
+  const { data, loading, refetch } = useWatchlistData(watchlist);
 
   const handleTradeClick = (symbol: string) => {
     setActiveSymbol(symbol);
@@ -19,13 +23,53 @@ export function WatchlistPage() {
     refetch();
   };
 
+  // In offline mode, use stored watchlist data with mock price updates
+  const auth = useContext(AuthContext) || { accessToken: null };
+  const isOffline = !auth?.accessToken;
+  const [offlinePrices, setOfflinePrices] = useState<MarketPriceData[]>([]);
+
+  // Use useMarketPrices to provide live price updates in offline mode
+  // Hook called at top level (after isOffline is determined)
+  const updateHandler = (prices: MarketPriceData[]) => {
+    setOfflinePrices(prices);
+  };
+
+  // Initialize mock prices when component mounts in offline mode
+  useEffect(() => {
+    if (isOffline) {
+      const mockSymbols = [
+        "Tech", "Meme", "BANK", "AAPL", "TSLA",
+      ];
+      generateAllMockPrices(mockSymbols);
+    }
+  }, [isOffline]);
+
+  useMarketPrices(updateHandler);
+
+  // In offline mode, map offline prices to watchlist items
+  const displayedData = isOffline
+    ? data.map((item: MarketPriceData) => {
+        const priceData = offlinePrices.find(p => p.symbol === item.symbol);
+        if (!priceData) return item;
+        const isPositive = priceData.change_24h >= 0;
+        return {
+          ...item,
+          price: `₹${priceData.price.toFixed(2)}`,
+          change_24h: priceData.change_24h,
+          ...(isPositive ? { change: `+${priceData.change_24h.toFixed(2)}%` } : { change: `-${Math.abs(priceData.change_24h).toFixed(2)}%` }),
+        };
+      })
+    : data;
+
   return (
     <div className="flex flex-col w-full h-full gap-2 overflow-hidden select-none font-sans pt-1">
       <div className="glass-panel rounded-lg flex flex-col overflow-hidden h-full">
         <div className="px-4 py-3 border-b border-main flex items-center gap-2">
           <Star size={16} className="text-yellow-400" fill="currentColor" />
           <span className="font-semibold text-base">My Watchlist</span>
-          <span className="text-xs text-muted font-normal ml-2">{data.length} Assets</span>
+          {isOffline && (
+            <span className="text-xs text-muted font-normal">Offline mode - using stored data</span>
+          )}
         </div>
 
         <div className="flex-1 overflow-auto no-scrollbar">
@@ -56,9 +100,15 @@ export function WatchlistPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-subtle">
-                {data.map(item => {
+                {displayedData.map(item => {
                   const meta = getSymbolMeta(item.symbol);
-                  const isPositive = item.change_24h >= 0;
+                  // Handle both online (number) and offline (string) price/change formats
+                  const priceValue = typeof item.price === 'string' ? item.price : `₹${item.price.toFixed(2)}`;
+                  const changeValue = typeof item.change_24h === 'number'
+                    ? (item.change_24h >= 0 ? `+${item.change_24h.toFixed(2)}%` : `${item.change_24h.toFixed(2)}%`)
+                    : item.change_24h; // already formatted string
+                  const isPositive = typeof item.change_24h === 'number' ? item.change_24h >= 0 : changeValue.startsWith('+');
+
                   return (
                     <tr key={item.symbol} className="group hover:bg-main/30 transition-colors">
                       <td className="py-3 px-4">
@@ -73,12 +123,12 @@ export function WatchlistPage() {
                         </div>
                       </td>
                       <td className="py-3 px-2 font-mono text-right text-main font-bold text-sm">
-                        ₹{item.price.toFixed(2)}
+                        {priceValue}
                       </td>
                       <td className="py-3 px-2 text-right">
                         <div className={`inline-flex items-center gap-1 font-mono font-bold text-sm ${isPositive ? 'text-up' : 'text-down'}`}>
                           {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                          {isPositive ? '+' : ''}{item.change_24h.toFixed(2)}%
+                          {changeValue}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right">

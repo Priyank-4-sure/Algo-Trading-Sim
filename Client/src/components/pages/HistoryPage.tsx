@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../config";
+import { retrieveTickHistory } from "../../data/mockStorage";
+import { generateMockCandles } from "../../data/mockPriceGenerator";
 
 interface TradeRecord {
   id: string;
@@ -65,10 +67,54 @@ export function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
 
+  // Check if we're in offline mode
+  const isOffline = !auth?.accessToken;
+
   // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchHistory = async () => {
-    if (!auth?.accessToken || !auth?.user) {
-      setError("Not authenticated.");
+    if (isOffline) {
+      // Offline mode: retrieve tick history from localStorage
+      // We need symbols and timeframe - use default symbols for now
+      const symbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
+      const timeframe = "1s";
+
+      // Retrieve tick history from localStorage
+      const allHistory: TradeRecord[] = [];
+      symbols.forEach(symbol => {
+        let ticks = retrieveTickHistory(symbol, timeframe);
+
+        // If no persisted history exists, generate initial mock candles
+        if (!ticks || ticks.length === 0) {
+          const generatedCandles = generateMockCandles(symbol, timeframe, 50);
+          ticks = generatedCandles.map(c => ({
+            symbol,
+            timeframe,
+            bucket_time: c.bucket_time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          }));
+        }
+
+        ticks.forEach(tick => {
+          const d = new Date(tick.bucket_time);
+          allHistory.push({
+            id: `${symbol}-${tick.bucket_time}`,
+            symbol: symbol,
+            side: "Buy", // Default side for mock data
+            price: tick.close,
+            quantity: 1,
+            total: tick.close * 1,
+            pnl: 0,
+            date: d.toISOString().slice(0, 10),
+            time: d.toTimeString().slice(0, 5),
+          });
+        });
+      });
+
+      setTradeHistory(allHistory);
       setIsLoading(false);
       return;
     }

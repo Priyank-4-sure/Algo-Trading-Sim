@@ -1,6 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useContext } from "react";
 import { API_BASE_URL } from "../config";
-import { generateAllMockPrices, resetMockPrices, MockPriceData } from "../data/mockPriceGenerator";
+import {
+  generateAllMockPrices,
+  generateMockTick,
+  generateOrderbook,
+  OrderbookData,
+  resetMockPrices,
+} from "../data/mockPriceGenerator";
+import { AuthContext } from "../context/AuthContext";
 
 export interface MarketPriceData {
   symbol: string;
@@ -12,17 +19,22 @@ export interface MarketPriceData {
   sparkline: number[];
 }
 
-export function useMarketPrices(onUpdate: (prices: MarketPriceData[]) => void) {
+export function useMarketPrices(
+  onUpdate: (prices: MarketPriceData[]) => void,
+  onOrderbookUpdate?: (orderbooks: OrderbookData[]) => void
+) {
   const callbackRef = useRef(onUpdate);
+  const orderbookCallbackRef = useRef(onOrderbookUpdate);
   useEffect(() => { callbackRef.current = onUpdate; });
+  useEffect(() => { orderbookCallbackRef.current = onOrderbookUpdate; });
+
+  const { accessToken } = useContext(AuthContext) || { accessToken: null };
+  const isOnline = !!accessToken;
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    const isOnline = !!token;
-
     if (isOnline) {
       // Online mode: connect to WebSocket backend
-      const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
+      const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${accessToken}`;
 
       const ws = new WebSocket(wsUrl);
 
@@ -50,66 +62,35 @@ export function useMarketPrices(onUpdate: (prices: MarketPriceData[]) => void) {
       // Offline/fallback mode: use mock data that evolves over time
       // Initialize with known symbols if not already done
       const knownSymbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
-      generateAllMockPrices(knownSymbols);
 
-      // Generate initial mock prices
-      const initialPrices = knownSymbols.map(symbol => ({
-        symbol,
-        price: currentPriceForSymbol(symbol),
-        change_24h: 0,
-        high_24h: 0,
-        low_24h: 0,
-        volume_24h: 0,
-        sparkline: [],
-      }));
+      // Generate proper initial mock prices with all fields populated
+      const initialPrices = generateAllMockPrices(knownSymbols);
 
-      // Send initial mock data
+      // Send initial mock data (with correct change_24h, high_24h, low_24h, volume_24h, sparkline)
       callbackRef.current(initialPrices);
 
-      // Set up interval to update prices every second for realistic evolution
-      const intervalId = setInterval(() => {
-        const updatedPrices = knownSymbols.map(symbol => ({
-          symbol,
-          price: currentPriceForSymbol(symbol),
-          change_24h: 0, // Will be recalculated
-          high_24h: 0,
-          low_24h: 0,
-          volume_24h: 0,
-          sparkline: [],
-        }));
+      // Generate and send initial orderbooks
+      if (orderbookCallbackRef.current) {
+        const initialOrderbooks = knownSymbols.map(symbol => generateOrderbook(symbol));
+        orderbookCallbackRef.current(initialOrderbooks);
+      }
 
+      // Set up interval to update prices AND orderbooks every second for realistic evolution
+      const intervalId = setInterval(() => {
+        const updatedPrices = knownSymbols.map(symbol => generateMockTick(symbol));
         callbackRef.current(updatedPrices);
+
+        if (orderbookCallbackRef.current) {
+          const updatedOrderbooks = knownSymbols.map(symbol => generateOrderbook(symbol));
+          orderbookCallbackRef.current(updatedOrderbooks);
+        }
       }, 1000);
 
       return () => {
         clearInterval(intervalId);
+        // Reset mock prices state so it can be re-initialized when page remounts
+        resetMockPrices();
       };
     }
-  }, []);
-}
-
-// Helper to get the current price for a symbol (from mock data)
-function currentPriceForSymbol(symbol: string): number {
-  // Ensure mock prices are initialized
-  const knownSymbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
-  if (!knownSymbols.includes(symbol)) return 100;
-
-  // If not initialized, set initial price
-  if (!(symbol in (global as any)._mockPrices)) {
-    (global as any)._mockPrices = {};
-    const initPrices: Record<string, number> = {
-      Tech: 64230.50,
-      Meme: 3380.20,
-      BANK: 148.45,
-      AAPL: 189.45,
-      TSLA: 175.22,
-    };
-    for (const s of knownSymbols) {
-      (global as any)._mockPrices[s] = initPrices[s] || 100;
-    }
-  }
-
-  // Generate a new tick and return the price
-  const data = generateMockTick(symbol);
-  return data.price;
+  }, [isOnline]);
 }

@@ -2,14 +2,11 @@ import { useState, useEffect, useCallback, ReactNode, useContext } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { TopNav } from "./TopNav";
 import { SideNav } from "./SideNav";
-import { MOCK_POSITIONS, MarketPair, Position } from "../../data/mockData";
+import { MOCK_POSITIONS, MarketPair, Position, MOCK_MARKETS } from "../../data/mockData";
 import { API_BASE_URL } from "../../config";
 import { SYMBOL_META } from "../../data/symbolMeta";
 import { useMarketPrices, MarketPriceData } from "../../hooks/useMarketPrices";
 import { usePortfolio, Holding } from "../../hooks/usePortfolio";
-import { generateAllMockPrices, resetMockPrices } from "../../data/mockPriceGenerator";
-
-// 👇 IMPORTANT: Adjust this import path to match where your AuthContext is located
 import { AuthContext } from "../../context/AuthContext";
 
 interface LayoutProps {
@@ -17,6 +14,8 @@ interface LayoutProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
   onLogout: () => void;
+  isOffline?: boolean;
+  onToggleOffline?: (offline: boolean) => void;
 }
 
 export interface DashboardContextType {
@@ -32,12 +31,37 @@ export interface DashboardContextType {
   setIsOffline: (value: boolean) => void;
 }
 
+function getOfflineWatchlist(): string[] {
+  try {
+    const stored = localStorage.getItem('offline_watchlist');
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setOfflineWatchlist(symbols: string[]): void {
+  try {
+    localStorage.setItem('offline_watchlist', JSON.stringify(symbols));
+  } catch (e) {
+    console.error('Failed to store offline watchlist:', e);
+  }
+}
+
 export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   const navigate = useNavigate();
 
-  // Get the access token directly from your AuthContext
+  // Get the access token directly from AuthContext
   const authContext = useContext(AuthContext);
   const accessToken = authContext?.accessToken;
+  const toggleOfflineMode = authContext?.toggleOfflineMode;
+
+  // Handle logout - just clear auth and redirect to landing
+  const handleLogout = useCallback(() => {
+    onLogout();
+    navigate("/");
+  }, [onLogout, navigate]);
+
   // 1. Initialize global state
   const [activeSymbol, setActiveSymbol] = useState("");
   const [markets, setMarkets] = useState<MarketPair[]>([]);
@@ -46,19 +70,47 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isOffline, setIsOfflineState] = useState(false);
 
-  // Portfolio holdings streamed via WebSocket (single shared connection)
-  const { holdings, updatePrice } = usePortfolio();
-
-  // Initialize mock prices on mount if going offline
+  // Initialize watchlist from localStorage in offline mode
   useEffect(() => {
-    if (isOffline) {
-      const knownSymbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
-      generateAllMockPrices(knownSymbols);
+    if (!accessToken) {
+      const storedWatchlist = getOfflineWatchlist();
+      if (storedWatchlist.length > 0) {
+        setWatchlist(storedWatchlist);
+      }
     }
-  }, [isOffline]);
+  }, [accessToken]);
+
+  // Persist watchlist to localStorage when it changes (offline mode)
+  useEffect(() => {
+    if (!accessToken) {
+      setOfflineWatchlist(watchlist);
+    }
+  }, [watchlist, accessToken]);
+
+  // Portfolio holdings streamed via WebSocket (single shared connection)
+  const { holdings, updatePrice, isOffline: offlineState } = usePortfolio();
+
+  // Use handleLogout instead of onLogout to properly reset offline state
+  const logoutHandler = () => handleLogout();
+
+  // Update offline state from portfolio hook
+  useEffect(() => {
+    setIsOfflineState(offlineState);
+  }, [offlineState]);
 
   // Fetch assets and watchlist from the backend API
   useEffect(() => {
+    // Skip API fetch if no auth token (offline mode)
+    // Markets are initialized by useMarketPrices hook below
+    if (!accessToken) {
+      // Set initial markets from MOCK_MARKETS - prices will be updated by useMarketPrices
+      setMarkets(MOCK_MARKETS);
+      if (MOCK_MARKETS.length > 0 && !activeSymbol) {
+        setActiveSymbol(MOCK_MARKETS[0].symbol);
+      }
+      return;
+    }
+
     // Fetch Assets (Public/No Auth Needed usually)
     fetch(`${API_BASE_URL}/assets`)
       .then((res) => res.json())
@@ -128,11 +180,6 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
 
   // 2. Updated toggle function to handle backend synchronization
   const toggleWatchlist = async (symbol: string) => {
-    if (!accessToken) {
-      console.error("No authentication token found. Cannot modify watchlist.");
-      return;
-    }
-
     const isWatched = watchlist.includes(symbol);
 
     // Optimistic UI update (feels instant to the user)
@@ -140,6 +187,13 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
       isWatched ? prev.filter((s) => s !== symbol) : [...prev, symbol],
     );
 
+    // Offline mode: persist to localStorage
+    if (!accessToken) {
+      // Already handled by the useEffect that watches watchlist changes
+      return;
+    }
+
+    // Online mode: sync with backend
     try {
       const method = isWatched ? "DELETE" : "POST";
       const response = await fetch(`${API_BASE_URL}/watchlist/${symbol}`, {
@@ -170,21 +224,7 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
     }
   };
 
-  // 4. Handler for toggling offline mode
-  const handleToggleOffline = useCallback(() => {
-    if (isOffline) {
-      // Switch back to online mode
-      resetMockPrices();
-      setIsOfflineState(false);
-    } else {
-      // Switch to offline/fake mode
-      const knownSymbols = ["Tech", "Meme", "BANK", "AAPL", "TSLA"];
-      generateAllMockPrices(knownSymbols);
-      setIsOfflineState(true);
-    }
-  }, [isOffline]);
-
-  // 3. Live price updates via WebSocket
+  // Live price updates via WebSocket
   const handlePriceUpdate = useCallback((prices: MarketPriceData[]) => {
     setMarkets((prev) =>
       prev.map((m) => {
@@ -207,25 +247,25 @@ export function Layout({ darkMode, toggleDarkMode, onLogout }: LayoutProps) {
 
   return (
     <div className="min-h-screen flex transition-colors duration-300 bg-main text-main font-sans">
-      <SideNav onLogout={onLogout} isMobileOpen={isMobileNavOpen} closeMobileNav={() => setIsMobileNavOpen(false)} />
+      <SideNav onLogout={logoutHandler} isMobileOpen={isMobileNavOpen} closeMobileNav={() => setIsMobileNavOpen(false)} />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
         <TopNav
           darkMode={darkMode}
           toggleDarkMode={toggleDarkMode}
           toggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)}
-          onLogout={onLogout}
+          onLogout={logoutHandler}
           onProfileClick={() => navigate("/app/portfolio")}
           activeSymbol={activeSymbol}
           onSymbolChange={setActiveSymbol}
           markets={markets}
           watchlist={watchlist}
           toggleWatchlist={toggleWatchlist}
-          isOffline={isOffline}
-          onToggleOffline={handleToggleOffline}
+          isOffline={isOffline ?? false}
+          onToggleOffline={toggleOfflineMode}
         />
-        
-        <main className="flex-1 p-2 overflow-auto md:overflow-hidden flex gap-2 w-full">
+
+        <main className="flex-1 flex flex-col h-screen overflow-auto md:overflow-hidden flex gap-2 w-full">
           {/* 2. Pass everything down through the Outlet context */}
           <Outlet context={{ activeSymbol, setActiveSymbol, markets, positions, holdings, updatePrice, watchlist, toggleWatchlist, isOffline, setIsOffline: setIsOfflineState } satisfies DashboardContextType} />
         </main>

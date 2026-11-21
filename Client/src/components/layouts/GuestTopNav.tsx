@@ -1,4 +1,4 @@
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, CloudOff, Cloud } from 'lucide-react';
 
 interface GuestTopNavProps {
   darkMode: boolean;
@@ -6,9 +6,11 @@ interface GuestTopNavProps {
   onLogin: () => void;
   onSignUp: () => void;
   onGoHome: () => void;
+  isOffline?: boolean;
+  onToggleOffline?: (offline: boolean) => void;
 }
 
-export function GuestTopNav({ darkMode, toggleDarkMode, onLogin, onSignUp, onGoHome }: GuestTopNavProps) {
+export function GuestTopNav({ darkMode, toggleDarkMode, onLogin, onSignUp, onGoHome, isOffline, onToggleOffline }: GuestTopNavProps) {
   return (
     <header className="h-12 md:h-14 border-b border-main bg-panel flex items-center justify-between px-4 md:px-6 sticky top-0 z-50 shrink-0 shadow-sm transition-colors font-sans">
 
@@ -25,6 +27,27 @@ export function GuestTopNav({ darkMode, toggleDarkMode, onLogin, onSignUp, onGoH
 
       {/* Auth & Theme */}
       <div className="flex items-center gap-1 md:gap-2">
+        {isOffline && (
+          <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-md hidden sm:inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Offline Mode
+          </span>
+        )}
+        {!isOffline && onToggleOffline && (
+          <button
+            onClick={() => onToggleOffline(!isOffline)}
+            className="p-1.5 md:p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main"
+            title={isOffline ? 'Go Online' : 'Go Offline'}
+          >
+            {isOffline ? <Cloud className="md:w-[18px] md:h-[18px]" /> : <CloudOff className="md:w-[18px] md:h-[18px]" />}
+          </button>
+        )}
+        {isOffline && (
+          <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-md hidden sm:inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Offline Mode
+          </span>
+        )}
         <button
           onClick={toggleDarkMode}
           className="p-1.5 md:p-2 rounded-full hover:bg-main transition-colors text-muted hover:text-main"

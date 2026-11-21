@@ -9,9 +9,9 @@ services:
       context: ./Client
       dockerfile: Dockerfile
       args:
-        # NOTE: For local VM testing, this can be your VM's IP address
-        # E.g., http://198.51.100.23:8080/v1
-        - VITE_API_BASE_URL=http://localhost:8080/v1
+        # Use Docker service name 'server' for container-to-container communication
+        # This works inside Docker network; for external access, nginx proxies /v1 to server:8080
+        - VITE_API_BASE_URL=/v1
     ports:
       - "80:80"
     depends_on:

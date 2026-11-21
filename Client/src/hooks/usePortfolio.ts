@@ -1,5 +1,7 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useContext } from 'react';
 import { API_BASE_URL } from '../config';
+import { storePortfolioState, retrievePortfolioState, clearPortfolioState } from '../data/mockStorage';
+import { AuthContext } from '../context/AuthContext';
 
 export interface Holding {
   id: string;
@@ -22,14 +24,40 @@ const getAssetColor = (asset: string) => {
     BTC: '#F7931A', ETH: '#627EEA', SOL: '#9945FF',
     AVAX: '#E84142', LINK: '#2A5ADA', DOGE: '#C2A633',
     NVDA: '#76B900',
+    Tech: '#F7931A', Meme: '#627EEA', BANK: '#9945FF',
+    AAPL: '#76B900', TSLA: '#E84142',
   };
   return colors[asset?.toUpperCase()] || '#888888';
 };
 
 export function usePortfolio() {
+  const { accessToken } = useContext(AuthContext) || { accessToken: null };
   const [holdingsData, setHoldingsData] = useState<any[]>([]);
   const [cashBalance, setCashBalance] = useState(0);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+  const [isOffline, setIsOffline] = useState(false);
+
+  // Initialize portfolio state from localStorage
+  useEffect(() => {
+    const storedState = retrievePortfolioState();
+    setCashBalance(storedState.cashBalance || 100000);
+
+    if (storedState.holdings.length > 0) {
+      // Convert stored holdings to holdingsData format
+      const formattedHoldings = storedState.holdings.map((h: any) => ({
+        id: h.symbol,
+        asset: h.symbol,
+        name: h.symbol,
+        quantity: h.quantity,
+        avgPrice: h.avgPrice,
+        currentPrice: h.currentPrice,
+        change24hPercent: 0,
+        color: getAssetColor(h.symbol),
+        sparklineData: Array(8).fill(h.currentPrice),
+      }));
+      setHoldingsData(formattedHoldings);
+    }
+  }, []);
 
   const updatePrice = useCallback((symbol: string, newPrice: number, change24h: number) => {
     setHoldingsData(prev => prev.map(h => {
@@ -43,14 +71,21 @@ export function usePortfolio() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
+    // Determine online/offline mode from AuthContext
+    const isOnline = !!accessToken;
 
-    if (!token) {
-      console.warn('WebSocket: No auth token found.');
+    if (!isOnline) {
+      console.warn('WebSocket: No auth token found. Running in offline mode.');
+      setIsOffline(true);
+      // Initialize offline portfolio state if needed
+      const storedState = retrievePortfolioState();
+      if (storedState.holdings.length === 0 && cashBalance === 0) {
+        setCashBalance(100000);
+      }
       return;
     }
 
-    const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${token}`;
+    const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/ws?token=${accessToken}`;
     let ws: WebSocket;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
@@ -61,13 +96,13 @@ export function usePortfolio() {
       ws.onopen = () => {
         console.log('[WS] Connected');
         setWsStatus('connected');
+        setIsOffline(false);
         ws.send(JSON.stringify({ action: 'subscribe', topic: 'portfolio:data' }));
       };
 
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          // console.log('[WS] Message received:', JSON.stringify(payload).slice(0, 300));
 
           // --- Handle initial portfolio data ---
           if (payload.data?.portfolio) {
@@ -93,7 +128,6 @@ export function usePortfolio() {
           }
 
           // --- Handle live price updates ---
-          // Flexibly extract fields so it works regardless of your backend's exact key names
           const type = payload.type || payload.event || payload.action;
           const symbol = payload.asset || payload.symbol || payload.ticker;
           const price = payload.newPrice ?? payload.price ?? payload.current_price;
@@ -123,7 +157,6 @@ export function usePortfolio() {
 
         // Auto-reconnect after 3 seconds unless it was a clean close
         if (event.code !== 1000) {
-          // console.log('[WS] Reconnecting in 3s...');
           reconnectTimeout = setTimeout(connect, 3000);
         }
       };
@@ -137,7 +170,29 @@ export function usePortfolio() {
         ws.close(1000, 'Component unmounted');
       }
     };
-  }, [updatePrice]);
+  }, [accessToken, updatePrice]);
+
+  // Persist portfolio state whenever holdings or cash balance change
+  useEffect(() => {
+    const state = {
+      cashBalance,
+      holdings: holdingsData.map(h => ({
+        symbol: h.asset,
+        quantity: h.quantity,
+        avgPrice: h.avgPrice,
+        currentPrice: h.currentPrice,
+        unrealizedPnL: h.unrealizedPnL,
+        pnLPercentage: h.pnLPercentage,
+      })),
+      totalValue: holdingsData.reduce((sum, h) => sum + h.value, 0) + cashBalance,
+      totalUnrealizedPnL: holdingsData.reduce((sum, h) => sum + h.unrealizedPnL, 0),
+      totalPnLPercentage: (() => {
+        const totalCost = holdingsData.reduce((sum, h) => sum + h.quantity * h.avgPrice, 0);
+        return totalCost > 0 ? (holdingsData.reduce((sum, h) => sum + h.unrealizedPnL, 0) / totalCost) * 100 : 0;
+      })(),
+    };
+    storePortfolioState(state);
+  }, [holdingsData, cashBalance]);
 
   // --- Math engine ---
   const holdings: Holding[] = useMemo(() => {
@@ -169,5 +224,86 @@ export function usePortfolio() {
     return maxHolding && maxHolding.portfolioWeight > 40 ? { asset: maxHolding.asset, percentage: maxHolding.portfolioWeight } : null;
   }, [holdings]);
 
-  return { holdings, cashBalance, totalPortfolioValue, totalUnrealizedPnL, totalPnLPercentage, riskMetrics, concentrationWarning, wsStatus, updatePrice };
+  // Function to execute a trade (buy/sell) and update portfolio
+  const executeTrade = useCallback((symbol: string, side: 'buy' | 'sell', quantity: number, price: number) => {
+    setHoldingsData(prev => {
+      const existing = prev.find(h => h.asset.toLowerCase() === symbol.toLowerCase());
+
+      if (side === 'buy') {
+        const cost = quantity * price;
+        if (cost > cashBalance) return prev; // Insufficient funds
+
+        setCashBalance(cb => cb - cost);
+
+        if (existing) {
+          // Average down/up
+          const newQuantity = existing.quantity + quantity;
+          const newAvgPrice = ((existing.quantity * existing.avgPrice) + cost) / newQuantity;
+          return prev.map(h =>
+            h.asset.toLowerCase() === symbol.toLowerCase()
+              ? { ...h, quantity: newQuantity, avgPrice: newAvgPrice }
+              : h
+          );
+        } else {
+          // New position
+          return [...prev, {
+            id: symbol,
+            asset: symbol,
+            name: symbol,
+            quantity,
+            avgPrice: price,
+            currentPrice: price,
+            change24hPercent: 0,
+            color: getAssetColor(symbol),
+            sparklineData: Array(8).fill(price),
+          }];
+        }
+      } else {
+        // Sell
+        if (!existing || existing.quantity < quantity) return prev; // Not enough quantity
+
+        const proceeds = quantity * price;
+        setCashBalance(cb => cb + proceeds);
+
+        const newQuantity = existing.quantity - quantity;
+        if (newQuantity <= 0) {
+          return prev.filter(h => h.asset.toLowerCase() !== symbol.toLowerCase());
+        } else {
+          return prev.map(h =>
+            h.asset.toLowerCase() === symbol.toLowerCase()
+              ? { ...h, quantity: newQuantity }
+              : h
+          );
+        }
+      }
+    });
+  }, [cashBalance]);
+
+  // Function to update cash balance directly (e.g., for deposits/withdrawals)
+  const updateCashBalance = useCallback((amount: number) => {
+    setCashBalance(cb => Math.max(0, cb + amount));
+  }, []);
+
+  // Clear portfolio (for logout or reset)
+  const clearPortfolio = useCallback(() => {
+    setHoldingsData([]);
+    setCashBalance(100000);
+    clearPortfolioState();
+  }, []);
+
+  return {
+    holdings,
+    cashBalance,
+    totalPortfolioValue,
+    totalUnrealizedPnL,
+    totalPnLPercentage,
+    riskMetrics,
+    concentrationWarning,
+    wsStatus,
+    updatePrice,
+    executeTrade,
+    updateCashBalance,
+    clearPortfolio,
+    isOffline,
+  };
 }

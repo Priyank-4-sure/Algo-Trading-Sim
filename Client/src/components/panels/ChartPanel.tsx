@@ -116,6 +116,7 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
 
   const handleLiveTick = useCallback((liveData: any, isHistorical: boolean) => {
     if (!seriesRef.current || !liveData) return;
+    if (!chartRef.current) return;
 
     const chunkSize = timeframe === '5s' ? 120 : 600;
 
@@ -146,9 +147,12 @@ export function ChartPanel({ darkMode, timeframe = '1s', symbol }: ChartPanelPro
         return;
       }
 
+      // Check if this is a live candle update (has time from current bucket)
       const t = Math.floor(new Date(liveData.bucket_time).getTime() / 1000);
 
       if (chartType === 'candlestick') {
+        // For live updates, we need to check if this candle is already in the chart
+        // If it's a new tick within the current time bucket, update only close and wicks
         seriesRef.current.update({
           time: t as any, open: liveData.open, high: liveData.high, low: liveData.low, close: liveData.close,
         });

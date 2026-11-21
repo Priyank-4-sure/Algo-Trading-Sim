@@ -1,6 +1,7 @@
-import { 
+import {
   Moon, Sun, Search, ChevronDown, LogOut, User, ChevronRight,
-  BarChart2, PieChart, Star, History, LineChart, Activity, Menu
+  BarChart2, PieChart, Star, History, LineChart, Activity, Menu,
+  Cloud, CloudOff
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom'; // <-- NEW: Import useLocation
@@ -17,8 +18,8 @@ interface TopNavProps {
   markets: MarketPair[];
   watchlist: string[];
   toggleWatchlist: (symbol: string) => Promise<void>;
-  isOffline: boolean;
-  onToggleOffline: () => void;
+  isOffline?: boolean;
+  onToggleOffline?: (offline: boolean) => void;
 }
 
 export function TopNav({
@@ -221,6 +222,21 @@ export function TopNav({
 
       {/* Right Side Settings (Always visible) */}
       <div className="flex items-center gap-1 md:gap-3 shrink-0 ml-1 md:ml-3">
+        {isOffline && (
+          <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-md hidden sm:inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Offline Mode
+          </span>
+        )}
+        {onToggleOffline && (
+          <button
+            onClick={() => onToggleOffline(!isOffline)}
+            className="p-1.5 md:p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main"
+            title={isOffline ? 'Go Online' : 'Go Offline'}
+          >
+            {isOffline ? <Cloud size={16} className="md:w-[18px] md:h-[18px]" /> : <CloudOff size={16} className="md:w-[18px] md:h-[18px]" />}
+          </button>
+        )}
         <button
           onClick={toggleDarkMode}
           className="p-1.5 md:p-2 rounded-full hover:bg-panel transition-colors text-muted hover:text-main"

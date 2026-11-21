@@ -821,9 +821,174 @@ Frontend:
 
 ---
 
+## Offline Mode Architecture
+
+The trading simulator supports a fully functional offline mode that allows users to experience the platform without authentication or backend connectivity.
+
+### Mode Detection
+
+Offline mode is determined by the absence of a valid `accessToken` in `AuthContext`:
+
+```
+AuthContext.accessToken
+    │
+    ├─► null/undefined → Offline Mode
+    │                     └─► Mock data generators activated
+    │
+    └─► valid token   → Online Mode
+                          └─► WebSocket connections to backend
+```
+
+**Critical Architecture Rule**: All hooks must derive offline state from `AuthContext.accessToken`, NOT from `localStorage.getItem("access_token")` directly. This ensures consistent mode detection across the application and proper reactivity to auth state changes.
+
+### Data Flow: Offline Mode
+
+```
+User visits /app (no token)
+    │
+    ▼
+AuthContext provides accessToken = null
+    │
+    ▼
+useMarketPrices detects offline mode
+    ├─► Calls generateAllMockPrices(symbols)
+    ├─► Sets up 1-second interval
+    └─► Each tick: generateMockTick(symbol)
+            │
+            ▼
+        notifyPriceChange(symbol, price)
+            │
+            ▼
+        useTrade subscriber receives price
+            │
+            ▼
+        generateMockCandles(symbol, timeframe, 1)
+            │
+            ▼
+        ChartPanel updates with new candle
+```
+
+### Mock Data Generators
+
+#### Price Generator (`mockPriceGenerator.ts`)
+
+```typescript
+// Core state
+let currentMockPrices: Record<string, number> = {};
+let isInitialized = false;
+
+// Key functions
+initMockPrices(symbols)     // Initialize prices from storage or defaults
+generateMockTick(symbol)     // Generate next price tick with random walk
+generateAllMockPrices(symbols)  // Batch initialize all symbols
+getCurrentMockPrice(symbol)  // Get current price without tick
+subscribeToPrice(symbol, cb) // Subscribe to price updates
+```
+
+**Price Evolution Algorithm**:
+1. Start with initial price (e.g., Tech: 64230.50)
+2. Each tick: apply random walk with volatility factor
+3. Clamp to positive values
+4. Persist to localStorage for survival across refreshes
+
+#### Candle Generator (`mockPriceGenerator.ts`)
+
+```typescript
+// Per-symbol-timeframe state
+candleStates: Record<string, {
+  currentPrice: number;
+  lastUpdateTime: number;
+  candles: MockCandleData[];
+}>
+
+// Key functions
+initCandleState(symbol, timeframe)  // Initialize state
+generateMockCandles(symbol, timeframe, count)  // Generate N candles
+getCachedCandles(symbol, timeframe)  // Get existing candles
+```
+
+**Candle Generation**:
+- Generates OHLC with realistic spreads
+- High ≥ max(open, close), Low ≤ min(open, close)
+- Persists last 500 candles per symbol-timeframe
+
+#### Storage (`mockStorage.ts`)
+
+Provides localStorage persistence for:
+- `mockPrices` - Current price state
+- `tickHistory:{symbol}:{timeframe}` - Candle history
+- `portfolioState` - Holdings and cash balance
+- `orderbook:{symbol}` - Order book snapshots
+
+### Hook Architecture for Offline Mode
+
+Each data hook follows this pattern:
+
+```typescript
+export function useSomeData() {
+  const { accessToken } = useContext(AuthContext);
+  
+  useEffect(() => {
+    const isOnline = !!accessToken;
+    
+    if (isOnline) {
+      // Connect to WebSocket backend
+      const ws = new WebSocket(wsUrl);
+      // ... handle messages
+      return () => ws.close();
+    } else {
+      // Use mock data generators
+      // ... generate and update state
+      return () => {/* cleanup interval/subscription */};
+    }
+  }, [accessToken]); // MUST include accessToken as dependency
+}
+```
+
+**Critical Dependencies**: All hooks MUST include `accessToken` (or derived value) in their useEffect dependency arrays. Empty dependency arrays `[]` prevent mode switching and cause stale connections.
+
+### Known Issues (Resolved)
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Market data not generating | Hooks check localStorage independently | Use AuthContext.accessToken |
+| Only one candle generated | useTrade missing token dependency | Add accessToken to deps |
+| Mode switch fails | Empty dependency arrays | Add accessToken to deps |
+| Duplicate initialization | Layout + hooks both initialize | Single source in useMarketPrices |
+| Race conditions | Multiple generators running | isInitialized guard in generator |
+
+### Mode Switching
+
+When auth state changes (login/logout):
+
+```
+accessToken changes (null ↔ "valid-token")
+    │
+    ▼
+All hooks' useEffect re-run (due to dependency)
+    │
+    ├─► Cleanup previous mode
+    │   ├─► Online→Offline: Close WebSocket
+    │   └─► Offline→Online: Clear interval
+    │
+    └─► Initialize new mode
+        ├─► Online: Connect WebSocket
+        └─► Offline: Start mock generators
+```
+
+### Optimization Opportunities
+
+1. **Centralized Offline Detection**: Create `useOfflineMode()` hook
+2. **Single WebSocket Manager**: Consolidate 4+ connections into one
+3. **Debounced Persistence**: Portfolio state writes on every change
+4. **Memoized Context**: Outlet context recreates on every price tick
+
+---
+
 ## References
 
 - **Order Book Implementation**: Based on exchange-grade LOB design
 - **GBM**: Standard quantitative finance model for price simulation
 - **Concurrency**: Go channels for safe goroutine communication
 - **Frontend State**: React hooks and context for simplicity over Redux
+- **Offline Mode**: Mock generators with localStorage persistence
